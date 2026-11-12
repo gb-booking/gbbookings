@@ -15,7 +15,9 @@ const MAX_FEEDS = 5;
 const MAX_FEED_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 const SYNC_EVERY_MS = 30 * 60_000;
-const SYNC_BATCH = 10;
+const SYNC_BATCH = 100;
+const SYNC_PARALLEL = 10;
+const SYNC_BUDGET_MS = 40_000;
 
 // Addresses a partner's link must never reach: this server's own network, cloud metadata and the like.
 const privateAddresses = new BlockList();
@@ -118,14 +120,24 @@ async function syncRoom(room: any) {
   return { feeds, conflicts };
 }
 
-/** Scheduled: the rooms whose calendars are most out of date. */
+/**
+ * Scheduled: the rooms whose calendars are most out of date, a few at a time.
+ * ponytail: up to 100 rooms per 5-minute run (600 per half hour), and it stops starting new groups after 40 seconds so the
+ * run fits a serverless call; rooms left over come first next time. Send one Inngest event per room beyond that.
+ */
 export async function syncDueCalendars() {
+  const startedAt = Date.now();
   const rooms = await HotelRoomTypeModel.find({
     'icalFeeds.0': { $exists: true }, status: 'active', deletedAt: null,
     $or: [{ icalSyncedAt: null }, { icalSyncedAt: { $lt: new Date(Date.now() - SYNC_EVERY_MS) } }],
   }).sort({ icalSyncedAt: 1 }).limit(SYNC_BATCH);
-  for (const room of rooms) await syncRoom(room).catch((error) => console.warn(`Calendar sync of ${room.publicId} failed: ${error.message}`));
-  return rooms.length;
+  let synced = 0;
+  for (let start = 0; start < rooms.length && Date.now() - startedAt < SYNC_BUDGET_MS; start += SYNC_PARALLEL) {
+    const group = rooms.slice(start, start + SYNC_PARALLEL);
+    await Promise.all(group.map((room) => syncRoom(room).catch((error) => console.warn(`Calendar sync of ${room.publicId} failed: ${error.message}`))));
+    synced += group.length;
+  }
+  return synced;
 }
 
 const syncView = (room: any, token: string, feeds: any[], conflicts: string[]) => {

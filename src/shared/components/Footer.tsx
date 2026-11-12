@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { api } from "../api/api";
 import GBLogo from "./GBLogo";
+import { STAY_TYPE_PAGES } from "../utils/rooms";
+import { TOWNS } from "../utils/places";
 
 // Set VITE_SUPPORT_PHONE / VITE_SUPPORT_WHATSAPP (digits, e.g. 928000112233) in .env; contact rows stay hidden until then.
 const SUPPORT_PHONE = import.meta.env.VITE_SUPPORT_PHONE as string | undefined;
@@ -28,7 +30,9 @@ const SOCIALS = [
 
 type FooterParams = { type?: "hotel" | "homestay" | "car" | "tour"; destination?: string; extra?: { category?: string; sort?: "price-low"; withDriver?: boolean }; section?: string };
 type FooterLink = { label: string; icon: typeof MapPin; view: string; params?: FooterParams };
-const destination = (name: string): FooterLink => ({ label: name, icon: MapPin, view: "search", params: { type: "hotel", destination: name } });
+// Each town has its own page (/place/<town>) listing stays, tours and cars there.
+const destination = (name: string): FooterLink => ({ label: name, icon: MapPin, view: "place", params: { destination: name } });
+const stayType = (label: string, icon: typeof MapPin, slug: string): FooterLink => ({ label, icon, view: "stay-type", params: { destination: slug } });
 const tours = (label: string, icon: typeof MapPin, params: FooterParams): FooterLink => ({ label, icon, view: "search", params: { type: "tour", ...params } });
 const stays = (label: string, icon: typeof MapPin, params: FooterParams): FooterLink => ({ label, icon, view: "search", params: { type: "hotel", ...params } });
 const cars = (label: string, icon: typeof MapPin, params: FooterParams): FooterLink => ({ label, icon, view: "search", params: { type: "car", ...params } });
@@ -36,7 +40,7 @@ const cars = (label: string, icon: typeof MapPin, params: FooterParams): FooterL
 const COLUMNS: Array<{ title: string; more: [string, string]; links: FooterLink[] }> = [
   {
     title: "Top Destinations", more: ["View All Destinations", "destinations"],
-    links: ["Skardu", "Hunza Valley", "Gilgit", "Shigar Valley", "Deosai Plains", "Fairy Meadows", "Naltar Valley", "Attabad Lake"].map(destination),
+    links: TOWNS.map(destination),
   },
   {
     title: "Tours & Packages", more: ["View All Packages", "tours"],
@@ -52,7 +56,7 @@ const COLUMNS: Array<{ title: string; more: [string, string]; links: FooterLink[
     links: [
       stays("Hotels in Skardu", Building2, { destination: "Skardu" }), stays("Hotels in Hunza", Building2, { destination: "Hunza" }), stays("Hotels in Gilgit", Building2, { destination: "Gilgit" }),
       stays("Luxury Hotels", Sparkles, { destination: "luxury" }), stays("Budget Hotels", Building2, { extra: { sort: "price-low" } }),
-      stays("Resorts", Building2, { extra: { category: "Resort" } }), stays("Guest Houses", Home, { extra: { category: "Guest House" } }), { label: "Homestays", icon: Home, view: "homestays" },
+      stayType("Resorts", Building2, "resort"), stayType("Guest Houses", Home, "guest-house"), { label: "Homestays", icon: Home, view: "homestays" },
     ],
   },
   {
@@ -60,7 +64,7 @@ const COLUMNS: Array<{ title: string; more: [string, string]; links: FooterLink[
     links: [
       cars("Car Rental in Skardu", Car, { destination: "Skardu" }), cars("Car Rental in Hunza", Car, { destination: "Hunza" }), cars("Car Rental in Gilgit", Car, { destination: "Gilgit" }),
       cars("SUVs & 4x4", Car, { destination: "4x4" }), cars("With Driver", UserCheck, { extra: { withDriver: true } }), cars("Self Drive", Key, { extra: { withDriver: false } }),
-      { label: "Travel Guide", icon: BookOpen, view: "destinations" }, { label: "About Us", icon: Users, view: "support" },
+      { label: "Travel Guide", icon: BookOpen, view: "destinations" }, { label: "About Us", icon: Users, view: "about" },
       { label: "Contact Us", icon: PhoneCall, view: "support", params: { section: "support-centre-view" } }, { label: "FAQs", icon: HelpCircle, view: "support", params: { section: "support-faqs" } },
     ],
   },
@@ -187,6 +191,17 @@ export default function Footer({ onNavigate }: FooterProps) {
               </div>
             ))}
           </div>
+
+          {/* Property types: one page each, as on Booking.com. Real links so crawlers follow them. */}
+          <nav aria-label="Property types" className="mt-4 border-t border-white/10 pt-6 text-xs text-slate-300">
+            <span className="mr-2 font-semibold text-white">Property types:</span>
+            {STAY_TYPE_PAGES.map((page, index) => (
+              <span key={page.slug}>
+                {index > 0 && <span aria-hidden="true" className="px-1.5 text-slate-500">·</span>}
+                <a href={`/stays/${page.slug}`} onClick={(event) => { event.preventDefault(); handleNav("stay-type", { destination: page.slug }); }} className="hover:text-white">{page.title}</a>
+              </span>
+            ))}
+          </nav>
 
           {/* 3. PAYMENT, CONTACT AND HELP */}
           <div className="border-t border-white/10 pt-8 mt-4">

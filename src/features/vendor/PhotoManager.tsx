@@ -10,11 +10,41 @@ export const toPhotoInput = (photos: EditablePhoto[]): PhotoInput[] => photos.ma
   ...(photo.caption?.trim() ? { caption: photo.caption.trim() } : {}),
 }));
 
+/**
+ * Booking.com-style quality check before upload: big enough to look sharp, and not a blank or single-colour image.
+ * Returns why a photo is refused, or '' when it is fine. Files the browser cannot read pass; the server checks them.
+ */
+export async function photoProblem(file: File) {
+  let bitmap: ImageBitmap;
+  try { bitmap = await createImageBitmap(file); } catch { return ''; }
+  const { width, height } = bitmap;
+  if (Math.max(width, height) < 1000 || Math.min(width, height) < 600) return `${file.name} is too small (${width}×${height}). Use photos at least 1000 pixels wide.`;
+  // A 64×48 thumbnail is enough to tell a real scene from a flat colour.
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 48;
+  const context = canvas.getContext('2d');
+  if (!context) return '';
+  context.drawImage(bitmap, 0, 0, 64, 48);
+  const pixels = context.getImageData(0, 0, 64, 48).data;
+  let sum = 0, squares = 0;
+  for (let at = 0; at < pixels.length; at += 4) {
+    const light = 0.299 * pixels[at] + 0.587 * pixels[at + 1] + 0.114 * pixels[at + 2];
+    sum += light; squares += light * light;
+  }
+  const count = pixels.length / 4;
+  const spread = Math.sqrt(squares / count - (sum / count) ** 2);
+  return spread < 12 ? `${file.name} looks blank or out of focus. Use a clear photo of the property.` : '';
+}
+
 const iconButton = 'flex size-11 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 disabled:opacity-30';
 
-export default function PhotoManager({ photos, onChange, max, label, onUploadingChange }: {
+export default function PhotoManager({ photos, onChange, max, label, onUploadingChange, min, qualityCheck = false }: {
   photos: EditablePhoto[]; onChange: (photos: EditablePhoto[]) => void; max: number; label: string;
   onUploadingChange?: (uploading: boolean) => void;
+  /** Shown as "at least N" until reached. */
+  min?: number;
+  /** Refuse small, blank or blurry photos before uploading them (listing photos). */
+  qualityCheck?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -28,14 +58,19 @@ export default function PhotoManager({ photos, onChange, max, label, onUploading
     if (photos.length + files.length > max) { setError(`Choose at most ${max} photos.`); return; }
     setUploading(true); onUploadingChange?.(true); setError('');
     const added: EditablePhoto[] = [];
+    const refused: string[] = [];
     try {
       for (const file of files) {
+        const problem = qualityCheck ? await photoProblem(file) : '';
+        if (problem) { refused.push(problem); continue; }
         const { data } = await api.uploadMedia('images', file);
         added.push({ url: data.url ?? URL.createObjectURL(file), mediaId: data.id });
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'A photo could not be uploaded.');
     } finally {
+      // Unlike Booking.com, which drops weak photos silently, say which ones were refused and why.
+      if (refused.length) setError(refused.join(' '));
       if (added.length) onChange([...photos, ...added]);
       setUploading(false); onUploadingChange?.(false);
     }
@@ -44,6 +79,8 @@ export default function PhotoManager({ photos, onChange, max, label, onUploading
   return (
     <fieldset className="space-y-2">
       <legend className="text-xs font-semibold text-slate-600">{label} · first photo is the cover</legend>
+      {min !== undefined && photos.length < min && <p className="text-sm text-slate-600">Upload at least {min} photos. {min - photos.length} more to go. The more you add, the more likely guests are to book.</p>}
+      {qualityCheck && <p className="text-xs text-slate-500">JPG, PNG or WebP, at least 1000 pixels wide. A phone camera is fine; only use photos you took or have permission to use.</p>}
       {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
       {photos.length > 0 && <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {photos.map((photo, index) => (

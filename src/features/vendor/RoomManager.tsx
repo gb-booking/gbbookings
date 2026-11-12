@@ -2,10 +2,9 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { CalendarDays, Image as ImageIcon, LoaderCircle, Minus, Plus } from 'lucide-react';
 import { api, type RoomCalendar as Calendar, type RoomSeason, type VendorListing, type VendorRoom, type VendorRoomInput } from '../../shared/api/api';
 import { useReasonDialog } from '../../shared/components/ReasonDialog';
-import ChipInput from './ChipInput';
 import PhotoManager, { toPhotoInput, type EditablePhoto } from './PhotoManager';
 import RoomCalendar from './RoomCalendar';
-import { BATHROOM_ITEMS, BED_KINDS, bedSummary, ROOM_NAME_PRESETS, ROOM_TYPES, type Bed, type BedKind, type RoomLayout, type RoomTypeKey } from '../../shared/utils/rooms';
+import { BATHROOM_ITEMS, BED_KINDS, bedSummary, ROOM_AMENITY_GROUPS, ROOM_TYPES, ROOM_VIEWS, standardRoomNames, type Bed, type BedKind, type RoomLayout, type RoomTypeKey } from '../../shared/utils/rooms';
 import Select from '../../shared/components/Select';
 import DateInput from '../../shared/components/DateInput';
 import { WEEKDAY_NAMES, type StayDeals } from '../../shared/utils/roomPricing';
@@ -13,11 +12,10 @@ import { WEEKDAY_NAMES, type StayDeals } from '../../shared/utils/roomPricing';
 const inputClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[#006F3C]';
 export const primaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#006F3C] px-4 text-sm font-bold text-white hover:bg-[#005c32] disabled:opacity-50';
 export const secondaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50';
-export const ROOM_AMENITIES = ['Heating', 'WiFi', 'Mountain view', 'Attached bath', 'Hot water', 'Balcony', 'TV', 'Kettle'];
 
 export const emptyRoom: Omit<VendorRoomInput, 'photos'> = { name: '', description: '', bedType: 'Double', maxAdults: 2, maxChildren: 1, totalRooms: 1, basePrice: 0, amenities: [] };
 /** A new hotel / homestay room: one double bed and a private bathroom to start from. Cars and tours use emptyRoom. */
-export const newRoom: Omit<VendorRoomInput, 'photos'> = { ...emptyRoom, bedType: '', roomType: 'double', beds: [{ kind: 'double', count: 1 }], bathroom: 'private', bathroomItems: ['Toilet', 'Shower', 'Hot water'] };
+export const newRoom: Omit<VendorRoomInput, 'photos'> = { ...emptyRoom, name: 'Standard Double Room', bedType: '', roomType: 'double', beds: [{ kind: 'double', count: 1 }], bathroom: 'private', bathroomItems: ['Toilet', 'Shower', 'Hot water'] };
 /** A home let as a whole is a single booking unit. */
 export const entireHome: Omit<VendorRoomInput, 'photos'> = { ...emptyRoom, name: 'Entire home', bedType: '', maxAdults: 4, maxChildren: 2, bedrooms: [{ beds: [{ kind: 'double', count: 1 }] }], bathrooms: 1 };
 export const isEntireHome = (listing: Pick<VendorListing, 'homestaySpecs'>) => listing.homestaySpecs?.stayType === 'entire_home';
@@ -96,17 +94,26 @@ export function RoomForm({ initial, live, busy, submitLabel, onSubmit, onCancel,
   });
   const chooseRoomType = (roomType: RoomTypeKey) => setRoom({
     ...room, roomType,
-    // Swap a preset name for the new type's preset; keep a name the partner typed.
-    name: !room.name.trim() || Object.values(ROOM_NAME_PRESETS).flat().includes(room.name) ? ROOM_NAME_PRESETS[roomType][0] : room.name,
+    // Standard names follow the room type, so a new type starts from its own first name.
+    name: standardRoomNames(roomType, room.amenities.includes("View") ? room.view : undefined)[0],
   });
   const bedrooms = room.bedrooms ?? [];
+  // Amenities typed before the checklist existed stay listed, so the partner can keep or untick them.
+  const otherAmenities = room.amenities.filter((item) => !Object.values(ROOM_AMENITY_GROUPS).flat().includes(item));
   const setBedroom = (index: number, beds: Bed[]) => setRoom({ ...room, bedrooms: bedrooms.map((bedroom, at) => (at === index ? { beds } : bedroom)) });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    // The main view only counts while "View" is ticked.
+    const view = room.amenities.includes('View') ? room.view : undefined;
+    if (room.amenities.includes('View') && !view) {
+      setProblem('Choose the main view from this room, or untick View.');
+      return;
+    }
+    const perRoom = { smokingAllowed: room.smokingAllowed, view };
     const layout: RoomLayout = singleUnit
-      ? { bedrooms: bedrooms.length ? bedrooms : undefined, bathrooms: room.bathrooms, sizeSqm: room.sizeSqm, cots: room.cots }
-      : { roomType: room.roomType, beds: room.beds?.length ? room.beds : undefined, bathroom: room.bathroom, bathroomItems: room.bathroomItems, sizeSqm: room.sizeSqm };
+      ? { bedrooms: bedrooms.length ? bedrooms : undefined, bathrooms: room.bathrooms, sizeSqm: room.sizeSqm, cots: room.cots, ...perRoom }
+      : { roomType: room.roomType, beds: room.beds?.length ? room.beds : undefined, bathroom: room.bathroom, bathroomItems: room.bathroomItems, sizeSqm: room.sizeSqm, ...perRoom };
     const bedType = bedSummary(layout) ?? legacyBeds;
     if (!bedType) {
       setProblem(singleUnit ? 'Add at least one bedroom with its beds.' : 'Add the beds in this room.');
@@ -128,8 +135,16 @@ export function RoomForm({ initial, live, busy, submitLabel, onSubmit, onCancel,
           {!room.roomType && <option value="" disabled>Choose…</option>}
           {Object.entries(ROOM_TYPES).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
         </Select></label>}
-      <label className="text-sm font-semibold text-slate-700">Name<input className={`${inputClass} mt-1`} required minLength={2} list="room-names" placeholder={singleUnit ? 'Entire home' : 'Deluxe Double Room'} value={room.name} onChange={(e) => setRoom({ ...room, name: e.target.value })} /></label>
-      <datalist id="room-names">{(room.roomType ? ROOM_NAME_PRESETS[room.roomType] : []).map((name) => <option key={name} value={name} />)}</datalist>
+      {singleUnit
+        ? <label className="text-sm font-semibold text-slate-700">Name<input className={`${inputClass} mt-1`} required minLength={2} placeholder="Entire home" value={room.name} onChange={(e) => setRoom({ ...room, name: e.target.value })} /></label>
+        // Standard names only, as on Booking.com: guests compare rooms more easily. A name saved before keeps its place.
+        : <label className="text-sm font-semibold text-slate-700">Room name
+          <Select className={`${inputClass} mt-1`} required value={room.name} onChange={(e) => setRoom({ ...room, name: e.target.value })}>
+            {!room.name && <option value="" disabled>Choose…</option>}
+            {[...new Set([...(room.name ? [room.name] : []), ...standardRoomNames(room.roomType, room.amenities.includes('View') ? room.view : undefined)])].map((name) => <option key={name}>{name}</option>)}
+          </Select>
+          <span className="mt-1 block text-xs font-normal text-slate-500">Standard names are clearer to guests. They follow the room type and its view.</span>
+        </label>}
       {!singleUnit && <label className="text-sm font-semibold text-slate-700">Rooms of this type<input {...number('totalRooms')} min={1} /></label>}
       <label className="text-sm font-semibold text-slate-700">Price per night (PKR)<input {...number('basePrice')} min={0} step={1} />{commission !== null && room.basePrice > 0 && <span className="mt-1 block text-xs font-normal text-slate-500">You earn PKR {Math.round(room.basePrice * (1 - commission / 100)).toLocaleString()} after the {commission}% GBBookings commission.</span>}</label>
       <label className="text-sm font-semibold text-slate-700">Max adults<input {...number('maxAdults')} min={1} max={20} /></label>
@@ -163,7 +178,31 @@ export function RoomForm({ initial, live, busy, submitLabel, onSubmit, onCancel,
         <label className="text-sm font-semibold text-slate-700">Size in m² (optional)<input {...optionalNumber('sizeSqm', 5000)} /></label>
       </>}
       {problem && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 sm:col-span-3">{problem}</p>}
-      <div className="sm:col-span-3"><ChipInput label="Room amenities" value={room.amenities} onChange={(amenities) => setRoom({ ...room, amenities })} suggestions={ROOM_AMENITIES} /></div>
+      <fieldset className="space-y-3 sm:col-span-3">
+        <legend className="text-sm font-semibold text-slate-700">What can guests use in this room?</legend>
+        {[...Object.entries(ROOM_AMENITY_GROUPS), ...(otherAmenities.length ? [['Other', otherAmenities] as [string, string[]]] : [])].map(([group, items]) => (
+          <div key={group}>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{group}</p>
+            <div className="mt-1 grid gap-x-4 sm:grid-cols-3">
+              {items.map((item) => <label key={item} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[#006F3C]" checked={room.amenities.includes(item)}
+                onChange={(e) => setRoom({ ...room, amenities: e.target.checked ? [...room.amenities, item] : room.amenities.filter((value) => value !== item) })} />{item}</label>)}
+            </div>
+            {group === 'Outdoors and views' && room.amenities.includes('View') && (
+              <label className="mt-1 block text-sm font-semibold text-slate-700 sm:w-1/2">What's the main view from this room?
+                <Select className={`${inputClass} mt-1`} required value={room.view ?? ''} onChange={(e) => setRoom({ ...room, view: e.target.value || undefined })}>
+                  <option value="" disabled>Choose a view</option>
+                  {ROOM_VIEWS.map((view) => <option key={view}>{view}</option>)}
+                </Select></label>
+            )}
+          </div>
+        ))}
+      </fieldset>
+      <fieldset className="sm:col-span-3">
+        <legend className="text-sm font-semibold text-slate-700">Is smoking allowed in this {singleUnit ? 'place' : 'room'}?</legend>
+        <div className="mt-1 flex gap-4">
+          {([[false, 'No'], [true, 'Yes']] as const).map(([value, text]) => <label key={text} className="flex min-h-11 items-center gap-2 text-sm"><input type="radio" name="room-smoking" className="size-4 accent-[#006F3C]" checked={(room.smokingAllowed ?? false) === value} onChange={() => setRoom({ ...room, smokingAllowed: value })} />{text}</label>)}
+        </div>
+      </fieldset>
       <label className="text-sm font-semibold text-slate-700 sm:col-span-3">Description (optional)<textarea className="mt-1 min-h-20 w-full rounded-lg border border-slate-300 p-3 text-sm" maxLength={2000} value={room.description ?? ''} onChange={(e) => setRoom({ ...room, description: e.target.value })} /></label>
       <div className="sm:col-span-3"><PhotoManager photos={photos} onChange={setPhotos} max={10} label="Room photos (optional)" onUploadingChange={setUploading} /></div>
       <div className="flex flex-wrap gap-2 sm:col-span-3">

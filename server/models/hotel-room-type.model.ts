@@ -22,6 +22,9 @@ const hotelRoomTypeSchema = new Schema({
   bathrooms: { type: Number, min: 0, max: 20 },
   sizeSqm: { type: Number, min: 1, max: 5_000 },
   cots: Boolean,
+  // Per room (Booking.com asks it per room); absent means the property-wide rule.
+  smokingAllowed: { type: Boolean, default: undefined },
+  view: { type: String, trim: true, maxlength: 40 },
   maxAdults: { type: Number, required: true, min: 1, max: 40 },
   maxChildren: { type: Number, required: true, min: 0, max: 20 },
   totalRooms: { type: Number, required: true, min: 1, max: 10_000 },
@@ -60,5 +63,6 @@ const hotelRoomTypeSchema = new Schema({
 
 hotelRoomTypeSchema.index({ listingId: 1, status: 1, deletedAt: 1 });
 
-export const HotelRoomTypeModel: Model<any> = (mongoose.models.HotelRoomType as Model<any> | undefined)
-  ?? mongoose.model<any>('HotelRoomType', hotelRoomTypeSchema);
+export type HotelRoomTypeRecord = mongoose.InferSchemaType<typeof hotelRoomTypeSchema>;
+export const HotelRoomTypeModel: Model<HotelRoomTypeRecord> = (mongoose.models.HotelRoomType as Model<HotelRoomTypeRecord> | undefined)
+  ?? mongoose.model<HotelRoomTypeRecord>('HotelRoomType', hotelRoomTypeSchema);

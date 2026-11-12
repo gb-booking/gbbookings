@@ -18,6 +18,14 @@
       "destination": "/api/index.ts"
     },
     {
+      "source": "/place/:town",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/stays/:slug",
+      "destination": "/api/index.ts"
+    },
+    {
       "source": "/(hotels|homestays|cars|tours)",
       "destination": "/api/index.ts"
     },

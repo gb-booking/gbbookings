@@ -8,6 +8,9 @@ const button = 'inline-flex min-h-10 items-center gap-2 rounded-lg border border
 const field = 'mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal outline-none focus:border-[#006F3C]';
 const when = (value?: string) => value ? new Date(value).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'not yet';
 
+// `lastSyncAt` moves only when a calendar was read successfully; it should be at most about 30 minutes old.
+const isStale = (lastSyncAt?: string) => !lastSyncAt || Date.now() - new Date(lastSyncAt).getTime() > 2 * 3_600_000;
+
 /** Two-way calendar sync for one room category, so bookings elsewhere and bookings here cannot double up. */
 export default function CalendarSyncPanel({ listingId, room, onChanged }: { listingId: string; room: VendorRoom; onChanged: () => void }) {
   const [sync, setSync] = useState<Sync | null>(null);
@@ -73,6 +76,7 @@ export default function CalendarSyncPanel({ listingId, room, onChanged }: { list
               <p className="truncate text-xs text-slate-500" title={feed.url}>{feed.url}</p>
               <p className="text-xs text-slate-600">{feed.nights} night{feed.nights === 1 ? '' : 's'} closed · updated {when(feed.lastSyncAt)}</p>
               {feed.lastError && <p className="text-xs font-medium text-rose-700">{feed.lastError} Its last known dates stay closed.</p>}
+              {isStale(feed.lastSyncAt) && <p className="text-xs font-medium text-amber-800">Not read for over 2 hours. Nights taken on that calendar since then are still open here, so check it before accepting bookings.</p>}
             </div>
             <button type="button" disabled={busy} aria-label={`Remove ${feed.name}`} className="flex size-10 shrink-0 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50 disabled:opacity-50" onClick={() => void act(() => api.removeCalendarFeed(listingId, room.id, feed.id), 'Calendar removed, and its nights reopened.')}><Trash2 className="size-4" /></button>
           </li>)}

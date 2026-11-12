@@ -1,12 +1,11 @@
 import type { ClientSession } from 'mongoose';
 import { connectDatabase } from '../../database/connection.js';
 import { CouponModel } from '../../models/coupon.model.js';
-import { VendorMemberModel } from '../../models/vendor-member.model.js';
 import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import type { SessionMetadata } from '../auth/auth.service.js';
 import { todayInPakistan } from '../bookings/stay-dates.js';
-import { MEMBER_ACCESS } from '../vendors/member-access.js';
+import { vendorIdsFor } from '../vendors/member-access.js';
 
 export type CouponTerms = { code: string; kind: 'percent' | 'amount'; value: number };
 
@@ -45,9 +44,9 @@ export async function releaseCoupon(vendorId: unknown, code: string, session: Cl
 
 async function couponVendorId(userId: string) {
   if (!await connectDatabase()) throw new ServiceUnavailableError('Promo codes are unavailable while the database is disconnected.');
-  const membership = await VendorMemberModel.findOne({ userId, status: 'active', deletedAt: null, role: { $in: MEMBER_ACCESS.listings } }).select('vendorId').lean() as any;
-  if (!membership) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Only the owner and managers can manage promo codes.');
-  return membership.vendorId;
+  const [vendorId] = await vendorIdsFor(userId, 'listings');
+  if (!vendorId) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Only the owner and managers can manage promo codes.');
+  return vendorId;
 }
 
 const serialize = (coupon: any) => ({

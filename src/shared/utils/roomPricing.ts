@@ -5,20 +5,24 @@ export type StayDeals = {
   lastMinute?: { days: number; percent: number };
 };
 
+/** The same deals as stored: a deal saved without its numbers never applies. */
+type StoredDeal<Key extends string> = { [Field in Key | 'percent']?: number | null } | null;
+export type StoredStayDeals = { longStay?: StoredDeal<'nights'>; earlyBird?: StoredDeal<'days'>; lastMinute?: StoredDeal<'days'> };
+
 export type StayRules = { minNights?: number | null; maxNights?: number | null; noArrivalDays?: number[] | null };
 
 export const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export const pakistanToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
 
-export function stayDealPercent(deals: StayDeals | null | undefined, nights: number, checkIn: string, today: string) {
+export function stayDealPercent(deals: StoredStayDeals | null | undefined, nights: number, checkIn: string, today: string) {
   if (!deals) return 0;
   const daysAhead = Math.round((Date.parse(checkIn) - Date.parse(today)) / 86_400_000);
   return Math.max(
     0,
-    deals.longStay && nights >= deals.longStay.nights ? deals.longStay.percent : 0,
-    deals.earlyBird && daysAhead >= deals.earlyBird.days ? deals.earlyBird.percent : 0,
-    deals.lastMinute && daysAhead <= deals.lastMinute.days ? deals.lastMinute.percent : 0,
+    deals.longStay?.nights != null && nights >= deals.longStay.nights ? deals.longStay.percent ?? 0 : 0,
+    deals.earlyBird?.days != null && daysAhead >= deals.earlyBird.days ? deals.earlyBird.percent ?? 0 : 0,
+    deals.lastMinute?.days != null && daysAhead <= deals.lastMinute.days ? deals.lastMinute.percent ?? 0 : 0,
   );
 }
 

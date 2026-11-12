@@ -12,6 +12,11 @@ export default function PoliciesFeesPanel({ listing, onChange }: { listing: Vend
   const [policy, setPolicy] = useState(listing.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY);
   const [fees, setFees] = useState<Fee[]>(listing.fees ?? []);
   const [instantBook, setInstantBook] = useState(Boolean(listing.instantBook));
+  // Hotels and homestays: null means the plan is off.
+  const stays = listing.type === 'hotel' || listing.type === 'homestay';
+  const [plans, setPlans] = useState<{ singleGuestPercent: number | null; nonRefundablePercent: number | null }>({
+    singleGuestPercent: listing.ratePlans?.singleGuestPercent ?? null, nonRefundablePercent: listing.ratePlans?.nonRefundablePercent ?? null,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const setFee = (index: number, patch: Partial<Fee>) => setFees(fees.map((fee, at) => at === index ? { ...fee, ...patch } : fee));
@@ -20,7 +25,7 @@ export default function PoliciesFeesPanel({ listing, onChange }: { listing: Vend
     event.preventDefault();
     setBusy(true); setError('');
     try {
-      const updated = await api.updateHotelListing(listing.id, { cancellationPolicy: policy, instantBook, fees: fees.map((fee) => ({ ...fee, name: fee.name.trim() })) });
+      const updated = await api.updateHotelListing(listing.id, { cancellationPolicy: policy, instantBook, ...(stays ? { ratePlans: plans } : {}), fees:fees.map((fee) => ({ ...fee, name: fee.name.trim() })) });
       onChange(updated, updated.pendingRevision ? 'Saved. Policy and fee changes go live once GBBookings approves them.' : 'Saved.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save.'); }
     finally { setBusy(false); }
@@ -51,6 +56,29 @@ export default function PoliciesFeesPanel({ listing, onChange }: { listing: Vend
           <span><span className="block font-semibold text-slate-900">Instant confirmation</span><span className="block text-sm text-slate-500">Pay on arrival bookings are confirmed right away, without you accepting each one. Guests are more likely to book, so keep your calendar up to date. This applies at once, without review. Pay now bookings are always confirmed once paid.</span></span>
         </label>
       </fieldset>
+
+      {stays && <fieldset className="space-y-3">
+        <legend className="text-base font-bold text-slate-900">Rate plans</legend>
+        <p className="text-sm text-slate-500">Extra prices guests can choose, as on Booking.com. They apply at once to new bookings. The weekly rate is each room's long-stay deal, under Rooms.</p>
+        {([
+          ['nonRefundablePercent', 'Non-refundable rate', 'Guests pay less but get no refund. Offered with Pay now only.'],
+          ['singleGuestPercent', 'Price for one guest', 'A room booked for one person costs less.'],
+        ] as const).map(([key, title, text]) => {
+          const on = plans[key] != null;
+          return (
+            <div key={key} className={`rounded-xl border p-4 ${on ? 'border-[#006F3C] bg-emerald-50/50' : 'border-slate-200'}`}>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input type="checkbox" checked={on} onChange={(event) => setPlans({ ...plans, [key]: event.target.checked ? 10 : null })} className="mt-1 size-4 accent-[#006F3C]" />
+                <span><span className="block font-semibold text-slate-900">{title}</span><span className="block text-sm text-slate-500">{text}</span></span>
+              </label>
+              {on && <label className="mt-3 flex items-center gap-2 pl-7 text-sm">
+                <input required type="number" min={1} max={50} aria-label={`${title} percent off`} value={plans[key] ?? ''} onChange={(event) => setPlans({ ...plans, [key]: Number(event.target.value) })} className={`${fieldClass} w-20`} />
+                % less than the standard rate
+              </label>}
+            </div>
+          );
+        })}
+      </fieldset>}
 
       <fieldset className="space-y-3">
         <legend className="text-base font-bold text-slate-900">Fees</legend>

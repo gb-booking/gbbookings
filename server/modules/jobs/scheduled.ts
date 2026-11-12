@@ -2,11 +2,13 @@ import { connectDatabase } from '../../database/connection.js';
 import { BookingModel } from '../../models/booking.model.js';
 import { notifyBooking } from '../bookings/booking-notifications.js';
 import { checkRecentDuplicatePayments, completeFinishedStays, expireStalePendingBookings } from '../bookings/booking.service.js';
+import { recountRoomNights } from '../bookings/availability.service.js';
 import { syncDueCalendars } from '../calendar/calendar.service.js';
 import { todayInPakistan } from '../bookings/stay-dates.js';
 import { sendPendingRefunds } from '../finance/refunds.service.js';
 import { sendOfflineMessageAlerts } from '../messages/message.service.js';
 import { REVIEW_WINDOW_DAYS } from '../reviews/review.service.js';
+import { ServiceUnavailableError } from '../../shared/app-error.js';
 
 const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
@@ -28,15 +30,31 @@ export async function sendTripEmails(today = todayInPakistan()) {
   return { reminders, invites };
 }
 
-/** Every few minutes: expire unanswered bookings, finish stuck refunds, alert people about unread messages. */
+export const frequentJobs: Array<{ id: string; run: () => Promise<unknown> }> = [
+  { id: 'expire-bookings', run: expireStalePendingBookings },
+  { id: 'send-refunds', run: sendPendingRefunds },
+  { id: 'message-alerts', run: sendOfflineMessageAlerts },
+  { id: 'complete-stays', run: completeFinishedStays },
+  { id: 'duplicate-payments', run: checkRecentDuplicatePayments },
+  { id: 'sync-calendars', run: syncDueCalendars },
+];
+
+/** Connect inside each durable step: a retry may run in a different server instance. */
+export async function runScheduledJob(job: () => Promise<unknown>) {
+  if (!await connectDatabase()) throw new ServiceUnavailableError('Scheduled jobs require a database connection.');
+  return job();
+}
+
+/** Timer fallback: let every job finish and log failures for the next scheduled run. */
 export async function runFrequentJobs() {
-  if (!await connectDatabase()) return { skipped: 'no database' };
-  const results = await Promise.allSettled([expireStalePendingBookings(), sendPendingRefunds(), sendOfflineMessageAlerts(), completeFinishedStays(), checkRecentDuplicatePayments(), syncDueCalendars()]);
-  for (const result of results) if (result.status === 'rejected') console.error('Scheduled job failed:', result.reason);
+  const results = await Promise.allSettled(frequentJobs.map((job) => runScheduledJob(job.run)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') console.error(`Scheduled job ${frequentJobs[index].id} failed:`, result.reason);
+  });
   return { expired: results[0].status === 'fulfilled' ? results[0].value : null };
 }
 
 export async function runDailyJobs() {
-  if (!await connectDatabase()) return { skipped: 'no database' };
-  return sendTripEmails();
+  // Both are safe to repeat: emails are flagged per booking, and a recount that finds nothing wrong writes nothing.
+  return runScheduledJob(async () => ({ ...await sendTripEmails(), countersCorrected: await recountRoomNights() }));
 }

@@ -5,6 +5,8 @@ import { api, ApiError, type VendorProfile } from '../../shared/api/api';
 import { formatDateForDisplay } from '../../shared/utils/date';
 import HotelRegistration, { businessTypeOf, type PartnerKind } from './HotelRegistration';
 import AddHotelWizard from '../vendor/AddHotelWizard';
+import AddCarWizard from '../vendor/AddCarWizard';
+import AddTourWizard from '../vendor/AddTourWizard';
 
 interface BecomePartnerProps {
   isLoggedIn: boolean;
@@ -49,8 +51,8 @@ export default function BecomePartner({ isLoggedIn, isPartner, onSignIn, onOpenD
   const [loading, setLoading] = useState(isLoggedIn);
   const [error, setError] = useState('');
   const [registering, setRegistering] = useState<PartnerKind | null>(null);
-  // Hotel and homestay applicants may build their first listing while the application is reviewed.
-  const [drafting, setDrafting] = useState<'hotel' | 'homestay' | null>(null);
+  // Like Booking.com, every new partner builds the first listing first; the business details come last.
+  const [drafting, setDrafting] = useState<PartnerKind | null>(null);
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [commission, setCommission] = useState<number | null>(null);
@@ -91,22 +93,25 @@ export default function BecomePartner({ isLoggedIn, isPartner, onSignIn, onOpenD
       onExit={() => setRegistering(null)} /></div>;
   }
 
-  // Hotels and homes: the listing comes first, step by step; a new partner's registration is its last step, and
+  // Like Booking.com, every type builds its first listing first; a new partner's registration is its last page, and
   // submitting it sends the listing for review together with the application.
   if (drafting && isLoggedIn && (!vendor || vendor.status === 'draft' || vendor.status === 'submitted')) {
     const closeFlow = (message = '') => { setDrafting(null); setNotice(message); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-    return <div className="px-4 pb-20 pt-2"><AddHotelWizard kind={drafting}
-      registration={vendor?.status === 'submitted' ? undefined : (onSubmitted) => <HotelRegistration embedded kind={drafting} vendor={vendor} emailVerified={emailVerified}
-        onVendorChange={(next) => { setVendor(next); if (next.status === 'submitted') onSubmitted(); }}
-        onEmailVerified={async () => { const verified = (await api.getCurrentUser()).user.emailVerified !== false; setEmailVerified(verified); return verified; }}
-        onExit={() => closeFlow()} />}
-      onExit={() => closeFlow()}
-      onDone={(listing) => { setHasListing(true); toast('Submitted for review. We\'ll email you once it\'s checked, usually within a day.'); closeFlow(`${listing.title} and your partner application were sent to GBBookings. We'll email you once they are checked, usually within a day.`); }} /></div>;
+    const registration = vendor?.status === 'submitted' ? undefined : (onSubmitted: () => void) => <HotelRegistration embedded kind={drafting} vendor={vendor} emailVerified={emailVerified}
+      onVendorChange={(next) => { setVendor(next); if (next.status === 'submitted') onSubmitted(); }}
+      onEmailVerified={async () => { const verified = (await api.getCurrentUser()).user.emailVerified !== false; setEmailVerified(verified); return verified; }}
+      onExit={() => closeFlow()} />;
+    const done = (listing: { title: string }) => { setHasListing(true); toast('Submitted for review. We\'ll email you once it\'s checked, usually within a day.'); closeFlow(`${listing.title} and your partner application were sent to GBBookings. We'll email you once they are checked, usually within a day.`); };
+    return <div className="px-4 pb-20 pt-2">{drafting === 'car'
+      ? <AddCarWizard registration={registration} onExit={() => closeFlow()} onDone={done} />
+      : drafting === 'tour'
+        ? <AddTourWizard registration={registration} onExit={() => closeFlow()} onDone={done} />
+        : <AddHotelWizard kind={drafting} registration={registration} onExit={() => closeFlow()} onDone={done} />}</div>;
   }
 
   const start = (kind: PartnerKind) => {
     if (!isLoggedIn) return onSignIn();
-    const flow = (kind === 'hotel' || kind === 'homestay') && (!vendor || vendor.status === 'draft');
+    const flow = !vendor || vendor.status === 'draft';
     if (flow) setDrafting(kind); else setRegistering(kind);
   };
 

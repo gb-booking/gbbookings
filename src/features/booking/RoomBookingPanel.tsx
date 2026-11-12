@@ -9,6 +9,7 @@ import { roomFacts } from '../../shared/utils/rooms';
 import type { CheckoutParams } from './CheckoutFlow';
 import Select from '../../shared/components/Select';
 import DateInput from '../../shared/components/DateInput';
+import { readLastStay } from '../../shared/utils/lastStay';
 
 interface RoomBookingPanelProps {
   listingId: string;
@@ -31,9 +32,11 @@ const labelClass = 'text-xs font-medium text-slate-600 flex items-center gap-1';
 
 /** Live room availability and server-quoted prices for hotels and homestays. */
 export default function RoomBookingPanel({ listingId, meals = [], entireHome = false, breakfastIncluded = false, paymentMethods, openMonths, onProceed }: RoomBookingPanelProps) {
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [adults, setAdults] = useState(2);
+  // Opened from search results: start with the dates and party the guest already chose there.
+  const [lastStay] = useState(readLastStay);
+  const [checkIn, setCheckIn] = useState(lastStay.checkIn);
+  const [checkOut, setCheckOut] = useState(lastStay.checkOut);
+  const [adults, setAdults] = useState(Math.min(lastStay.guests || 2, 10));
   const [children, setChildren] = useState(0);
   const [rooms, setRooms] = useState(1);
   const [chosenMeals, setChosenMeals] = useState<MealType[]>([]);
@@ -78,6 +81,12 @@ export default function RoomBookingPanel({ listingId, meals = [], entireHome = f
 
   const selectedRoom = availability?.rooms.find((room) => room.id === selectedRoomId);
   const mealCost = availability?.mealsTotal ?? 0;
+  // Booking.com's rate choice: the standard rate, or the cheaper non-refundable one where the room offers it.
+  const [ratePlan, setRatePlan] = useState<'standard' | 'non_refundable'>('standard');
+  const plan = selectedRoom?.nonRefundable ? ratePlan : 'standard';
+  const planPrice = (room: NonNullable<typeof selectedRoom>) => (plan === 'non_refundable' && room.nonRefundable ? room.nonRefundable : room);
+  // Per night for the chosen rate; the non-refundable quote has only its total.
+  const planNightly = selectedRoom && availability ? (plan === 'non_refundable' ? Math.round(planPrice(selectedRoom).roomTotal / (availability.nights * rooms)) : selectedRoom.nightlyRate) : 0;
 
   const proceed = () => {
     if (!availability || !selectedRoom) return;
@@ -92,10 +101,12 @@ export default function RoomBookingPanel({ listingId, meals = [], entireHome = f
       children,
       guests: adults + children,
       duration: availability.nights,
-      totalPrice: selectedRoom.totalPrice,
+      totalPrice: planPrice(selectedRoom).totalPrice,
       mealsTotal: mealCost,
       meals: chosenMeals,
-      payAtHotel: true,
+      // Non-refundable is paid now; checkout offers only Pay now for it.
+      payAtHotel: plan !== 'non_refundable',
+      ratePlan: plan,
     });
   };
 
@@ -161,7 +172,7 @@ export default function RoomBookingPanel({ listingId, meals = [], entireHome = f
               <span className={`text-xs font-medium block mt-0.5 ${room.available ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {room.available === 0 ? 'Sold out' : !room.bookable ? room.stayRule ?? 'Does not fit your party' : `${room.available} left`}
               </span>
-              {room.bookable && <span className="mt-1.5 flex flex-wrap gap-1">{room.dealPercent ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">{room.dealPercent}% off, already in this price</span> : null}{choices.map((choice) => <span key={choice} className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">✓ {choice}</span>)}</span>}
+              {room.bookable && <span className="mt-1.5 flex flex-wrap gap-1">{room.dealPercent ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">{room.dealPercent}% off, already in this price</span> : null}{room.singleGuestPercent ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">{room.singleGuestPercent}% off for one guest</span> : null}{room.maxChildren > 0 && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">✓ Children stay free</span>}{room.nonRefundable && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-800">Non-refundable from PKR {room.nonRefundable.totalPrice.toLocaleString()}</span>}{choices.map((choice) => <span key={choice} className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">✓ {choice}</span>)}</span>}
             </div>
             <div className="text-right shrink-0">
               <span className="text-sm font-bold text-slate-900 block">PKR {room.totalPrice.toLocaleString()}</span>
@@ -170,6 +181,22 @@ export default function RoomBookingPanel({ listingId, meals = [], entireHome = f
           </button>
         ))}
       </div>
+
+      {selectedRoom?.nonRefundable && (
+        <fieldset className="space-y-2">
+          <legend className={labelClass}>Your rate</legend>
+          {([
+            ['standard', 'Standard rate', availability?.freeCancellationUntil ? `Free cancellation until ${formatDateForDisplay(availability.freeCancellationUntil)}. Pay now or on arrival.` : 'Pay now or on arrival.', selectedRoom.totalPrice],
+            ['non_refundable', `Non-refundable · save ${selectedRoom.nonRefundable.percent}%`, 'Paid now online. No refund if you cancel or change your plans.', selectedRoom.nonRefundable.totalPrice],
+          ] as const).map(([value, label, text, price]) => (
+            <label key={value} className={`flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-3 text-sm ${ratePlan === value ? 'border-[#006F3C] bg-emerald-50/60' : 'border-slate-200'}`}>
+              <span className="flex items-start gap-2"><input type="radio" name="rate-plan" className="mt-0.5 size-4 accent-[#006F3C]" checked={ratePlan === value} onChange={() => setRatePlan(value)} />
+                <span><span className="block font-semibold text-slate-900">{label}</span><span className="text-xs text-slate-500">{text}</span></span></span>
+              <span className="shrink-0 font-bold text-slate-900">PKR {price.toLocaleString()}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       {extraMeals.length > 0 && (
         <fieldset className="space-y-2">
@@ -187,8 +214,8 @@ export default function RoomBookingPanel({ listingId, meals = [], entireHome = f
       {selectedRoom && availability && (
         <div className="space-y-2 border-t border-slate-200 pt-4 text-sm" id="booking-price-breakdown">
           <div className="flex justify-between text-slate-500">
-            <span>{selectedRoom.nightlyRate * availability.nights * rooms !== selectedRoom.roomTotal ? 'avg. ' : ''}PKR {selectedRoom.nightlyRate.toLocaleString()} × {availability.nights} night{availability.nights > 1 ? 's' : ''}{entireHome ? '' : ` × ${rooms} room${rooms > 1 ? 's' : ''}`}</span>
-            <span className="text-slate-800">PKR {selectedRoom.roomTotal.toLocaleString()}</span>
+            <span>{planNightly * availability.nights * rooms !== planPrice(selectedRoom).roomTotal ? 'avg. ' : ''}PKR {planNightly.toLocaleString()} × {availability.nights} night{availability.nights > 1 ? 's' : ''}{entireHome ? '' : ` × ${rooms} room${rooms > 1 ? 's' : ''}`}</span>
+            <span className="text-slate-800">PKR {planPrice(selectedRoom).roomTotal.toLocaleString()}</span>
           </div>
           {mealCost > 0 && <div className="flex justify-between text-slate-500">
             <span>Meals · {adults + children} guest{adults + children > 1 ? 's' : ''} × {availability.nights} night{availability.nights > 1 ? 's' : ''}</span>
@@ -196,7 +223,7 @@ export default function RoomBookingPanel({ listingId, meals = [], entireHome = f
           </div>}
           <div className="flex justify-between font-semibold text-slate-900">
             <span>Total before any fees and taxes</span>
-            <span>PKR {selectedRoom.totalPrice.toLocaleString()}</span>
+            <span>PKR {planPrice(selectedRoom).totalPrice.toLocaleString()}</span>
           </div>
         </div>
       )}

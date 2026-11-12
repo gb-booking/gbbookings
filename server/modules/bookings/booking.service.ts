@@ -12,7 +12,7 @@ import type { UserRole } from '../../models/user.model.js';
 import { VendorMemberModel } from '../../models/vendor-member.model.js';
 import { VendorModel } from '../../models/vendor.model.js';
 import { escapeRegex } from '../../shared/escape-regex.js';
-import { MEMBER_ACCESS } from '../vendors/member-access.js';
+import { vendorIdsFor } from '../vendors/member-access.js';
 import { reviewableUntil, reviewsForBookings } from '../reviews/review.service.js';
 import { claimCoupon, couponLabel, discountMinor, findUsableCoupon, releaseCoupon } from '../coupons/coupon.service.js';
 import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
@@ -25,7 +25,7 @@ import type { AdminBookingsQuery, CreateBookingInput, ListBookingsQuery } from '
 import { stayNights, todayInPakistan } from './stay-dates.js';
 import { rentalExtrasMinor, rentalTerms, shownEnd, storedEnd, type RentalChoice } from './rental.js';
 import { assertSeats, assertTourDate, tourSubtotalMinor, tourTerms } from './tour.js';
-import { nightPriceMinor, nightsPriceMinor, type PricedUnit } from './room-price.js';
+import { nightPriceMinor, ratePlanMinor, staySubtotalMinor, type PricedUnit, type RatePlan, type RatePlans } from './room-price.js';
 import { stayDealPercent, stayRuleProblem } from '../../../src/shared/utils/roomPricing.js';
 import { getPlatformSettings, guestRefundPercent, percentOfMinor } from '../settings/settings.service.js';
 import { ONLINE_HOLD_MINUTES, onlinePaymentsEnabled, startSafepayCheckout, trackerPaid, trackersIn } from '../payments/safepay.js';
@@ -33,6 +33,7 @@ import { DEFAULT_CANCELLATION_POLICY, daysBetween, fullRefundUntil, refundPercen
 import { applyCharges, chargeRulesFor, commissionOn, type ChargeRule } from './charges.js';
 import { heldMinor } from '../finance/settlement.js';
 import { sendDueRefunds } from '../finance/refunds.service.js';
+import { inngestEnabled } from '../jobs/inngest.js';
 
 export const BOOKABLE_LISTING_TYPES = ['hotel', 'homestay', 'car', 'tour'];
 
@@ -41,7 +42,11 @@ type Actor = { userId: string; roles: UserRole[] };
 
 async function requireDatabase() {
   if (!await connectDatabase()) throw new ServiceUnavailableError('Bookings are unavailable while the database is disconnected.');
-  await expireStalePendingBookings();
+  // Keep the lazy fallback for installations without a scheduler. Inngest owns expiry when configured.
+  if (!inngestEnabled() && Date.now() - lastSweepAt >= 60_000) {
+    lastSweepAt = Date.now();
+    await expireStalePendingBookings().catch((error) => console.error('Pending booking sweep failed:', error));
+  }
 }
 
 const PENDING_TTL_MS = env.PENDING_BOOKING_HOURS * 3_600_000;
@@ -52,36 +57,34 @@ let lastSweepAt = 0;
 
 /**
  * Cancels pending requests the property did not answer in time (or whose check-in date has passed), releasing their rooms.
- * ponytail: runs lazily from booking requests (at most once a minute per instance) and on a timer on long-running servers;
- * add a Vercel cron hitting a booking endpoint if guests must be emailed promptly during quiet periods.
+ * Scheduled calls always run, including retries. Only the request fallback is throttled by requireDatabase.
  */
 export async function expireStalePendingBookings(now = new Date()) {
-  if (now.getTime() - lastSweepAt < 60_000) return 0;
-  lastSweepAt = now.getTime();
   let expired = 0;
-  try {
-    const stale = await BookingModel.find({
-      status: 'pending',
-      $or: [
-        { paymentMethod: { $ne: 'online' }, createdAt: { $lt: new Date(now.getTime() - PENDING_TTL_MS) } },
-        { paymentMethod: 'online', createdAt: { $lt: new Date(now.getTime() - ONLINE_HOLD_MS) } },
-        { checkIn: { $lt: todayInPakistan(now) } },
-      ],
-    }).limit(100);
-    for (const booking of stale) {
-      try {
-        // A Pay now booking may have been paid without the guest returning; ask Safepay before releasing it.
-        if (booking.paymentMethod === 'online' && await settleOnlinePayment(booking)) continue;
-        await applyTransition({}, booking, 'cancel', booking.paymentMethod === 'online' ? ONLINE_EXPIRY_REASON : EXPIRY_REASON, {});
-        expired += 1;
-      } catch (error) {
-        // 409: the property answered between the query and the update.
-        if (!(error instanceof AppError && error.status === 409)) console.error(`Expiring booking ${booking.reference} failed:`, error);
+  const failures: unknown[] = [];
+  const stale = await BookingModel.find({
+    status: 'pending',
+    $or: [
+      { paymentMethod: { $ne: 'online' }, createdAt: { $lt: new Date(now.getTime() - PENDING_TTL_MS) } },
+      { paymentMethod: 'online', createdAt: { $lt: new Date(now.getTime() - ONLINE_HOLD_MS) } },
+      { checkIn: { $lt: todayInPakistan(now) } },
+    ],
+  }).limit(100);
+  for (const booking of stale) {
+    try {
+      // A Pay now booking may have been paid without the guest returning; ask Safepay before releasing it.
+      if (booking.paymentMethod === 'online' && await settleOnlinePayment(booking)) continue;
+      await applyTransition({}, booking, 'cancel', booking.paymentMethod === 'online' ? ONLINE_EXPIRY_REASON : EXPIRY_REASON, {});
+      expired += 1;
+    } catch (error) {
+      // 409: the property answered between the query and the update.
+      if (!(error instanceof AppError && error.status === 409)) {
+        console.error(`Expiring booking ${booking.reference} failed:`, error);
+        failures.push(error);
       }
     }
-  } catch (error) {
-    console.error('Pending booking sweep failed:', error);
   }
+  if (failures.length) throw new AggregateError(failures, 'Some pending bookings could not be expired.');
   return expired;
 }
 
@@ -117,6 +120,7 @@ export function serializeBooking(booking: any) {
     totalPrice: booking.pricing.totalMinor / 100,
     ...(booking.pricing.balanceDueMinor ? { balanceDue: booking.pricing.balanceDueMinor / 100, balanceCollectedAt: booking.balanceCollectedAt } : {}),
     ...(booking.cancellationPolicy ? { cancellationPolicy: booking.cancellationPolicy } : {}),
+    ...(booking.ratePlan ? { ratePlan: booking.ratePlan } : {}),
     ...(booking.refunds?.length ? { refunds: booking.refunds.map((refund: any) => ({ kind: refund.kind, channel: refund.channel, amount: refund.amountMinor / 100, status: refund.status, sentAt: refund.sentAt })) } : {}),
     ...(booking.changeRequest ? { changeRequest: { ...(booking.changeRequest.toObject?.() ?? booking.changeRequest) } } : {}),
     ...(booking.noShow ? { noShow: {
@@ -140,6 +144,7 @@ export function serializeBooking(booking: any) {
     checkInTime: booking.listingSnapshot.checkInTime,
     // The guest gets the property's number once it has accepted the stay.
     ...(booking.listingSnapshot.phone && ['confirmed', 'completed'].includes(booking.status) ? { propertyPhone: booking.listingSnapshot.phone } : {}),
+    ...(booking.listingSnapshot.arrivalNote && ['confirmed', 'completed'].includes(booking.status) ? { arrivalNote: booking.listingSnapshot.arrivalNote } : {}),
     checkOutTime: booking.listingSnapshot.checkOutTime,
     history: (booking.statusHistory ?? []).map(({ status, at, reason }: any) => ({ status, at, reason })),
     createdAt: booking.createdAt,
@@ -153,12 +158,20 @@ function serializeTour(tour: any) {
   };
 }
 
-/** Room price for the booked nights (weekend and season prices apply per night); tours charge each traveller once at the start date's price, children at the child price. */
-function unitSubtotalMinor(room: PricedUnit, nights: string[], rooms: number, adults: number, children: number, tour?: { childPriceMinor?: number }) {
+/**
+ * Room price for the booked nights (weekend and season prices apply per night), after the listing's rate plans:
+ * the single-guest price and, when chosen, the non-refundable price. Tours charge each traveller once at the start
+ * date's price, children at the child price.
+ */
+function unitSubtotalMinor(room: PricedUnit, nights: string[], rooms: number, adults: number, children: number, tour?: { childPriceMinor?: number }, plans?: RatePlans | null, plan: RatePlan = 'standard') {
   if (tour) return tourSubtotalMinor(nightPriceMinor(room, nights[0]), tour, adults, children);
-  const percent = stayDealPercent(room.deals, nights.length, nights[0], todayInPakistan());
-  // Whole rupees, so a discount never leaves paisa on a bill.
-  return Math.round(nightsPriceMinor(room, nights) * (100 - percent) / 10_000) * 100 * rooms;
+  return ratePlanMinor(staySubtotalMinor(room, nights, rooms, todayInPakistan()), plans, { adults, children, rooms }, plan);
+}
+
+/** A booking's listing's rate plans, for re-pricing a change. Cars and tours have none. */
+async function ratePlansOf(booking: any): Promise<RatePlans | undefined> {
+  if (booking.tour || booking.rental) return undefined;
+  return ((await ListingModel.findById(booking.listingId).select('ratePlans').lean()) as any)?.ratePlans ?? undefined;
 }
 
 /** What one unit costs per night on average for these dates (the adult price for tours). */
@@ -285,10 +298,22 @@ export async function getListingAvailability(
     rooms: roomTypes.map((room) => {
       const free = available.get(String(room._id)) ?? 0;
       const extrasMinor = rentalExtrasMinor(rental, nights.length, query.rooms);
-      const unitMinor = unitSubtotalMinor(room, nights, query.rooms, query.adults, query.children, tour);
+      const plans = tour || rental ? undefined : listing.ratePlans;
+      const unitMinor = unitSubtotalMinor(room, nights, query.rooms, query.adults, query.children, tour, plans);
       const grossMinor = unitMinor + mealsMinor + extrasMinor;
       const offMinor = discountMinor(coupon, grossMinor);
       const charged = applyCharges(grossMinor - offMinor, chargeRules);
+      // Non-refundable needs the money up front, so it is offered only while Pay now works.
+      const nonRefundable = plans?.nonRefundablePercent && onlinePaymentsEnabled() ? (() => {
+        const planMinor = unitSubtotalMinor(room, nights, query.rooms, query.adults, query.children, tour, plans, 'non_refundable');
+        const planGross = planMinor + mealsMinor + extrasMinor;
+        const planCharged = applyCharges(planGross - discountMinor(coupon, planGross), chargeRules);
+        return {
+          percent: plans.nonRefundablePercent, roomTotal: planMinor / 100, totalPrice: planCharged.totalMinor / 100,
+          ...(planCharged.lines.length ? { charges: planCharged.lines.map((line) => ({ name: line.name, type: line.type, amount: line.amountMinor / 100 })) } : {}),
+        };
+      })() : undefined;
+      const singleGuest = Boolean(plans?.singleGuestPercent && query.adults + query.children <= query.rooms);
       const stayRule = tour ? undefined : stayRuleProblem(room, nights.length, query.checkIn);
       const dealPercent = tour ? 0 : stayDealPercent(room.deals, nights.length, query.checkIn, todayInPakistan());
       return {
@@ -305,7 +330,9 @@ export async function getListingAvailability(
         bookable: free >= query.rooms && partyFits(room, query.adults, query.children, query.rooms) && !stayRule,
         ...(stayRule ? { stayRule } : {}),
         ...(dealPercent ? { dealPercent } : {}),
-        nightlyRate: averageRateMinor(unitSubtotalMinor(room, nights, 1, query.adults, query.children, tour), nights, 1, room, tour) / 100,
+        ...(singleGuest ? { singleGuestPercent: plans!.singleGuestPercent } : {}),
+        ...(nonRefundable ? { nonRefundable } : {}),
+        nightlyRate: averageRateMinor(unitMinor, nights, query.rooms, room, tour) / 100,
         roomTotal: unitMinor / 100,
         ...(rental ? { extrasTotal: extrasMinor / 100 } : {}),
         ...(coupon ? { discount: offMinor / 100 } : {}),
@@ -324,7 +351,8 @@ export async function createBooking(
   input: CreateBookingInput,
   idempotencyKey: string | undefined,
   metadata: SessionMetadata,
-) {
+  retried = false,
+): Promise<{ booking: ReturnType<typeof serializeBooking>; replayed: boolean }> {
   await requireDatabase();
   const requestHash = createHash('sha256').update(JSON.stringify({
     listingId: input.listingId, roomTypeId: input.roomTypeId, checkIn: input.checkIn, checkOut: input.checkOut,
@@ -391,7 +419,13 @@ export async function createBooking(
       const stayRule = tour ? undefined : stayRuleProblem(room, nights.length, input.checkIn);
       if (stayRule) throw new AppError(422, 'STAY_RULE', `${stayRule} for this room.`);
       const instant = Boolean(listing.instantBook) && input.paymentMethod !== 'online';
-      const subtotalMinor = unitSubtotalMinor(room, nights, input.rooms, input.adults, input.children, tour);
+      const plans = tour || rental ? undefined : listing.ratePlans;
+      const ratePlan: RatePlan = input.ratePlan ?? 'standard';
+      if (ratePlan === 'non_refundable') {
+        if (!plans?.nonRefundablePercent) throw new AppError(409, 'RATE_PLAN_UNAVAILABLE', 'This property no longer offers a non-refundable rate. Choose the standard rate.');
+        if (input.paymentMethod !== 'online') throw new AppError(422, 'RATE_PLAN_NEEDS_PAY_NOW', 'The non-refundable rate is paid now, online. Choose Pay now or the standard rate.');
+      }
+      const subtotalMinor = unitSubtotalMinor(room, nights, input.rooms, input.adults, input.children, tour, plans, ratePlan);
       const meals = chosenMeals(listing, input.meals);
       const mealsMinor = mealsCostMinor(meals, input.adults + input.children, nights.length);
       const extrasMinor = rentalExtrasMinor(rental, nights.length, input.rooms);
@@ -417,6 +451,7 @@ export async function createBooking(
         checkInTime: listing.hotelSpecs?.checkInTime,
         checkOutTime: listing.hotelSpecs?.checkOutTime,
         phone: propertyPhone,
+        arrivalNote: listing.stayInfo?.arrivalNote,
       },
       roomSnapshot: { publicId: room.publicId, name: room.name, bedType: room.bedType },
       checkIn: input.checkIn,
@@ -435,7 +470,8 @@ export async function createBooking(
         charges: charged.lines.length ? charged.lines : undefined, feesMinor: charged.feesMinor, taxesMinor: charged.taxesMinor,
         commissionPercent, commissionMinor: commissionOn({ totalMinor, taxesMinor: charged.taxesMinor, commissionPercent }),
       },
-      cancellationPolicy: listing.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY,
+      cancellationPolicy: ratePlan === 'non_refundable' ? 'non_refundable' : listing.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY,
+      ...(ratePlan === 'non_refundable' ? { ratePlan } : {}),
       coupon,
       rental,
       tour,
@@ -463,6 +499,10 @@ export async function createBooking(
       const existing = await BookingModel.findOne({ customerId, idempotencyKey });
       if (existing) return replay(existing);
     }
+    // The random reference matched an existing booking's. The transaction rolled back, so book again with a new one.
+    if ((error as { code?: number; keyPattern?: Record<string, unknown> })?.code === 11000 && (error as { keyPattern?: Record<string, unknown> }).keyPattern?.reference && !retried) {
+      return createBooking(customerId, input, idempotencyKey, metadata, true);
+    }
     throw error;
   }
 }
@@ -470,6 +510,8 @@ export async function createBooking(
 /** Where Safepay sends the guest back: the Bookings page, which checks the payment. */
 const paymentReturnUrl = (booking: any, cancelled = false) =>
   `${env.APP_URL ?? 'http://localhost:3000'}/bookings?payment=${booking.publicId}${cancelled ? '&cancelled=1' : ''}`;
+
+const MAX_PAYMENT_ATTEMPTS = 5;
 
 /** Opens Safepay's payment page for an unpaid Pay now booking. Each call (a retry) opens a new tracker. */
 export async function startOnlinePayment(actor: Actor, bookingId: string) {
@@ -484,6 +526,10 @@ export async function startOnlinePayment(actor: Actor, bookingId: string) {
   // Leave time to finish paying before the hold runs out.
   if (Date.now() - new Date(booking.createdAt).getTime() > ONLINE_HOLD_MS - 10 * 60_000) {
     throw new AppError(409, 'PAYMENT_WINDOW_CLOSED', 'The time to pay for this booking has nearly run out. Please book again.');
+  }
+  // Every tracker is re-checked with Safepay on each return, webhook and sweep, so their number is capped.
+  if ((booking.onlinePayment?.trackers?.length ?? 0) >= MAX_PAYMENT_ATTEMPTS) {
+    throw new AppError(429, 'TOO_MANY_PAYMENT_ATTEMPTS', 'This booking has had too many payment attempts. Please book again.');
   }
   const { tracker, url } = await startSafepayCheckout({
     amountMinor: booking.pricing.totalMinor, reference: booking.reference, redirectUrl: paymentReturnUrl(booking), cancelUrl: paymentReturnUrl(booking, true),
@@ -783,10 +829,7 @@ export async function listCustomerBookings(customerId: string, query: ListBookin
 }
 
 export async function reservationVendorIds(userId: string) {
-  const memberships = await VendorMemberModel.find({
-    userId, status: 'active', deletedAt: null, role: { $in: MEMBER_ACCESS.reservations },
-  }).select('vendorId').lean() as any[];
-  return memberships.map((membership) => membership.vendorId);
+  return vendorIdsFor(userId, 'reservations');
 }
 
 export async function listVendorBookings(userId: string, query: ListBookingsQuery) {
@@ -997,7 +1040,7 @@ async function applyBookingChange(actor: Actor, booking: any, input: { checkIn: 
       { _id: roomRef._id, status: 'active', deletedAt: null }, { $inc: { inventoryVersion: 1 } }, { session, returnDocument: 'after' },
     );
     if (!room) throw new AppError(409, 'ROOM_UNAVAILABLE', 'The selected room is no longer available.');
-    const subtotalMinor = unitSubtotalMinor(room, nights, input.rooms, booking.adults, booking.children, booking.tour ?? undefined);
+    const subtotalMinor = unitSubtotalMinor(room, nights, input.rooms, booking.adults, booking.children, booking.tour ?? undefined, await ratePlansOf(booking), booking.ratePlan ?? 'standard');
     // Meals keep their booked price; their cost follows the new number of nights.
     const mealsMinor = mealsCostMinor(booking.meals, booking.adults + booking.children, nights.length);
     // Car extras and the promo code keep the terms fixed at booking and apply to the new days.
@@ -1069,7 +1112,7 @@ async function quoteChange(booking: any, input: { checkIn: string; checkOut: str
   // The booking's own rooms count as free on the nights it already holds.
   const held = String(room._id) === String(booking.roomTypeId) && nights.every((night) => stayNights(booking.checkIn, booking.checkOut, booking.checkIn).includes(night)) ? booking.rooms : 0;
   if (free + held < input.rooms) throw new AppError(409, 'ROOM_UNAVAILABLE', 'Those dates are not available.');
-  const subtotalMinor = unitSubtotalMinor(room, nights, input.rooms, booking.adults, booking.children, booking.tour ?? undefined);
+  const subtotalMinor = unitSubtotalMinor(room, nights, input.rooms, booking.adults, booking.children, booking.tour ?? undefined, await ratePlansOf(booking), booking.ratePlan ?? 'standard');
   const mealsMinor = mealsCostMinor(booking.meals, booking.adults + booking.children, nights.length);
   const extrasMinor = rentalExtrasMinor(booking.rental, nights.length, input.rooms);
   const couponMinor = discountMinor(booking.coupon, subtotalMinor + mealsMinor + extrasMinor);
@@ -1214,9 +1257,8 @@ const nextDay = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + day
  */
 export async function vendorReport(userId: string, range: { from: string; to: string }) {
   await requireDatabase();
-  const memberships = await VendorMemberModel.find({ userId, status: 'active', deletedAt: null, role: { $in: MEMBER_ACCESS.reports } }).select('vendorId').lean() as any[];
-  if (!memberships.length) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Reports are available to the hotel owner, managers and finance.');
-  const vendorIds = memberships.map((membership) => membership.vendorId);
+  const vendorIds = await vendorIdsFor(userId, 'reports');
+  if (!vendorIds.length) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Reports are available to the hotel owner, managers and finance.');
   const end = nextDay(range.to); // exclusive
   const days = nightsInRange(range.from, range.to);
 

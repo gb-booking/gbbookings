@@ -1,6 +1,7 @@
 import { DEFAULT_CANCELLATION_POLICY } from "../../../src/shared/utils/cancellation.js";
 import { connectDatabase } from "../../database/connection.js";
 import { inTransaction } from "../../database/transaction.js";
+import { BookingModel } from "../../models/booking.model.js";
 import { HotelRoomTypeModel } from "../../models/hotel-room-type.model.js";
 import { ListingModel, latLng } from "../../models/listing.model.js";
 import { ListingDraftModel } from "../../models/listing-draft.model.js";
@@ -18,7 +19,8 @@ import {
 } from "../bookings/availability.service.js";
 import { todayInPakistan } from "../bookings/stay-dates.js";
 import { notifyVendorDecision } from "../vendors/vendor-notifications.js";
-import { canAccess } from "../vendors/member-access.js";
+import { canAccess, vendorIdsFor } from "../vendors/member-access.js";
+import { assertPartnerVerified } from "../vendors/vendor.service.js";
 
 async function requireDatabase() {
   if (!(await connectDatabase()))
@@ -82,6 +84,7 @@ function listingView(listing: any) {
     stayInfo: listing.stayInfo,
     cancellationPolicy: listing.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY,
     instantBook: Boolean(listing.instantBook),
+    ratePlans: plainValue(listing.ratePlans) ?? {},
     fees: plainValue(listing.fees) ?? [],
     status: listing.status,
     rejectionReason: listing.rejectionReason,
@@ -252,12 +255,8 @@ function roomView(room: any) {
  */
 async function approvedVendor(userId: string) {
   await requireDatabase();
-  const membership = await VendorMemberModel.findOne({
-    userId,
-    status: "active",
-    deletedAt: null,
-  });
-  if (!membership || !canAccess(membership.role, "listings")) {
+  const [vendorId] = await vendorIdsFor(userId, "listings");
+  if (!vendorId) {
     throw new AppError(
       403,
       "VENDOR_ACCESS_REQUIRED",
@@ -265,7 +264,7 @@ async function approvedVendor(userId: string) {
     );
   }
   const vendor = await VendorModel.findOne({
-    _id: membership.vendorId,
+    _id: vendorId,
     status: { $in: ["submitted", "approved"] },
     deletedAt: null,
   });
@@ -356,6 +355,12 @@ function setListingPhotos(listing: any, photos: any[]) {
   );
 }
 
+/** Rate plans as stored: null switches a plan off. */
+const plainRatePlans = (plans?: { singleGuestPercent?: number | null; nonRefundablePercent?: number | null }) => plans && {
+  ...(plans.singleGuestPercent ? { singleGuestPercent: plans.singleGuestPercent } : {}),
+  ...(plans.nonRefundablePercent ? { nonRefundablePercent: plans.nonRefundablePercent } : {}),
+};
+
 // What guests read. Edits to these on a live listing (or its rooms) wait for review; everything else applies at once.
 // Nested sub-documents as plain data (undefined when unset or empty), so revisions compare by value.
 const plainValue = (value: any) => {
@@ -373,6 +378,11 @@ const listingContent = (listing: any) => ({
     policies: [...(listing.hotelSpecs.policies ?? [])],
     checkInTime: listing.hotelSpecs.checkInTime,
     checkOutTime: listing.hotelSpecs.checkOutTime,
+    checkInUntil: listing.hotelSpecs.checkInUntil,
+    checkOutFrom: listing.hotelSpecs.checkOutFrom,
+    languages: listing.hotelSpecs.languages?.length ? [...listing.hotelSpecs.languages] : undefined,
+    chainName: listing.hotelSpecs.chainName,
+    invoiceName: listing.hotelSpecs.invoiceName,
     breakfast: plainValue(listing.hotelSpecs.breakfast),
     parking: plainValue(listing.hotelSpecs.parking),
     licenceNumber: listing.hotelSpecs.licenceNumber,
@@ -507,6 +517,8 @@ export async function createHotelListing(
     coordinates: toGeoPoint(input.coordinates),
     stayInfo: input.stayInfo,
     cancellationPolicy: input.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY,
+    instantBook: Boolean(input.instantBook),
+    ratePlans: input.type === "car" || input.type === "tour" ? undefined : plainRatePlans(input.ratePlans),
     fees: input.fees,
     status: "draft",
     featured: false,
@@ -546,14 +558,30 @@ export async function updateHotelListing(
       "Listings cannot be edited while under review.",
     );
   assertPropertyType(listing.type, input.hotelSpecs?.hotelType, listing.hotelSpecs?.hotelType);
-  const { price, imageIds, photos, departures, instantBook, ...edits } = input;
+  const { price, imageIds, photos, departures, instantBook, ratePlans, ...edits } = input;
   // How bookings are answered is an operating choice, like departures: it applies at once.
   if (instantBook !== undefined) listing.instantBook = instantBook;
+  // Rate plans are prices: they apply at once. Cars and tours have none.
+  if (ratePlans !== undefined && listing.type !== "car" && listing.type !== "tour") listing.ratePlans = plainRatePlans(ratePlans) as any;
   // Each listing type keeps its own spec block.
   if (listing.type === "car" || listing.type === "tour") delete edits.hotelSpecs;
   if (listing.type !== "tour") delete edits.tourSpecs;
   // Departure dates are day-to-day operations, like price: they apply at once.
-  if (departures && listing.type === "tour") listing.departures = departuresFor("tour", departures);
+  if (departures && listing.type === "tour") {
+    const next = departuresFor("tour", departures) ?? [];
+    // A date people have booked cannot be dropped from under them: those bookings are cancelled first.
+    const removed = (listing.departures ?? []).filter((date: string) => date >= todayInPakistan() && !next.includes(date));
+    const booked = removed.length
+      ? await BookingModel.distinct("checkIn", { listingId: listing._id, status: { $in: ["pending", "confirmed"] }, checkIn: { $in: removed } })
+      : [];
+    if (booked.length)
+      throw new AppError(
+        409,
+        "DEPARTURE_HAS_BOOKINGS",
+        `${booked.sort().join(", ")} ${booked.length === 1 ? "has" : "have"} bookings. Cancel those bookings in Reservations before removing the date.`,
+      );
+    listing.departures = next;
+  }
   if (edits.carSpecs) {
     if (listing.type === "car") edits.carSpecs = carSpecsFor(edits.carSpecs);
     else delete edits.carSpecs;
@@ -1265,12 +1293,12 @@ export async function listRoomsForModeration(listingId: string) {
 export async function moderateListing(
   adminId: string,
   listingId: string,
-  input: { decision: string; notes: string },
+  input: { decision: "published" | "rejected"; notes: string },
   metadata: SessionMetadata,
 ) {
   await requireDatabase();
   // Publishing needs a submitted listing; rejecting also takes down a live or paused one, returning it to the vendor.
-  const from =
+  const from: Array<"submitted" | "published" | "paused"> =
     input.decision === "published"
       ? ["submitted"]
       : ["submitted", "published", "paused"];
@@ -1444,8 +1472,8 @@ export async function decideListingRevision(
 async function draftOwner(userId: string, kind: string) {
   await requireDatabase();
   const membership = await VendorMemberModel.findOne({ userId, status: "active", deletedAt: null });
-  // Listing comes first: someone who has not applied yet may draft any kind; the application follows at the end.
-  if (!membership) return;
+  // Listing comes first: someone who has not applied yet may draft any kind; the application follows at the end. They must have passed the partner email check first.
+  if (!membership) return assertPartnerVerified(userId);
   const vendor = canAccess(membership.role, "listings")
     ? await VendorModel.findOne({ _id: membership.vendorId, status: { $in: ["draft", "submitted", "approved"] }, deletedAt: null })
     : null;

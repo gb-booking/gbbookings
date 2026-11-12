@@ -7,6 +7,8 @@ import { EXPERIENCE_TYPES } from '../../shared/api/api';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import { CardSkeleton } from '../../shared/components/SkeletonLoader';
 import { nextDay } from '../../shared/utils/date';
+import { readLastStay, saveLastStay } from '../../shared/utils/lastStay';
+import { GUEST_POLICY_LABELS } from '../../shared/utils/stayInfo';
 import { api } from '../../shared/api/api';
 import type { MapPoint } from '../../shared/components/OsmMap';
 import ListingCard from '../../shared/components/ListingCard';
@@ -24,6 +26,8 @@ interface ListingsSearchProps {
     extra: { guestCount?: number; experience?: string; withDriver?: boolean; category?: string; sort?: 'price-low' };
   };
   onSelectListing: (listing: Listing) => void;
+  /** Page title instead of the type name, e.g. "Resorts" on a property-type page. */
+  heading?: string;
 }
 
 type SortOption = 'recommended' | 'price-low' | 'price-high' | 'rating';
@@ -41,7 +45,7 @@ const TYPE_LABELS: Record<ListingType, string> = {
   offer: 'Offers',
 };
 
-export default function ListingsSearch({ type, initialFilters, onSelectListing }: ListingsSearchProps) {
+export default function ListingsSearch({ type, initialFilters, onSelectListing, heading }: ListingsSearchProps) {
   const [query, setQuery] = useState(initialFilters.destination || '');
   const [maxPrice, setMaxPrice] = useState(PRICE_CEILING);
   const [minimumRating, setMinimumRating] = useState(0);
@@ -49,18 +53,21 @@ export default function ListingsSearch({ type, initialFilters, onSelectListing }
   const [transmission, setTransmission] = useState<'all' | 'Automatic' | 'Manual'>('all');
   // Landing pages send their two dates as "YYYY-MM-DD to YYYY-MM-DD".
   const [initialStart, initialEnd] = (initialFilters.startDate || '').split(' to ');
-  const [checkIn, setCheckIn] = useState(/^\d{4}-\d{2}-\d{2}$/.test(initialStart ?? '') ? initialStart : '');
-  const [checkOut, setCheckOut] = useState(initialFilters.endDate || (/^\d{4}-\d{2}-\d{2}$/.test(initialEnd ?? '') ? initialEnd : ''));
+  // Stays with no dates passed in (a refresh, the Back button) reuse the last stay search in this tab.
+  const [lastStay] = useState(() => (type === 'hotel' || type === 'homestay') && !initialStart ? readLastStay() : null);
+  const [checkIn, setCheckIn] = useState(/^\d{4}-\d{2}-\d{2}$/.test(initialStart ?? '') ? initialStart : lastStay?.checkIn ?? '');
+  const [checkOut, setCheckOut] = useState(initialFilters.endDate || (/^\d{4}-\d{2}-\d{2}$/.test(initialEnd ?? '') ? initialEnd : lastStay?.checkOut ?? ''));
   const [driver, setDriver] = useState<'' | 'with_driver' | 'self_drive'>(initialFilters.extra.withDriver === undefined ? '' : initialFilters.extra.withDriver ? 'with_driver' : 'self_drive');
   const [showFilters, setShowFilters] = useState(false);
   const [facilities, setFacilities] = useState('');
   const [page, setPage] = useState(1);
-  const [guests, setGuests] = useState(initialFilters.extra.guestCount || 0);
+  const [guests, setGuests] = useState(initialFilters.extra.guestCount || lastStay?.guests || 0);
   const [experience, setExperience] = useState(initialFilters.extra.experience ?? '');
   const [stayType, setStayType] = useState<'' | 'rooms' | 'entire_home'>('');
   const [breakfast, setBreakfast] = useState(false);
   const [freeCancellation, setFreeCancellation] = useState(false);
   const [minStars, setMinStars] = useState(0);
+  const [guestPolicy, setGuestPolicy] = useState<'' | 'everyone' | 'families_only' | 'women_only'>('');
   const [view, setView] = useState<'list' | 'map'>('list');
   const [places, setPlaces] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
@@ -91,11 +98,13 @@ export default function ListingsSearch({ type, initialFilters, onSelectListing }
     ...(supportsDates && !cars && breakfast ? { breakfast: 'true' as const } : {}),
     ...(freeCancellation ? { freeCancellation: 'true' as const } : {}),
     ...(type === 'hotel' && minStars ? { minStars } : {}),
+    ...(stays && guestPolicy ? { guestPolicy } : {}),
     ...(cars && transmission !== 'all' ? { transmission } : {}),
     ...(cars && driver ? { driver } : {}),
     limit: 24, page,
   });
-  useEffect(() => { setPage(1); }, [searchTerm, priceLimit, minimumRating, sortBy, checkIn, checkOut, guests, facilities, experience, stayType, breakfast, freeCancellation, minStars, transmission, driver, category, type]);
+  useEffect(() => { if (stays) saveLastStay({ checkIn: datesValid ? checkIn : '', checkOut: datesValid ? checkOut : '', guests }); }, [stays, datesValid, checkIn, checkOut, guests]);
+  useEffect(() => { setPage(1); }, [searchTerm, priceLimit, minimumRating, sortBy, checkIn, checkOut, guests, facilities, experience, stayType, breakfast, freeCancellation, minStars, guestPolicy, transmission, driver, category, type]);
   useEffect(() => { api.getTopPlaces(type, 20).then((result) => setPlaces(result.map((place) => place.name))).catch(() => undefined); }, [type]);
   useEffect(() => { setExperience(initialFilters.extra.experience ?? ''); }, [initialFilters.extra.experience]);
 
@@ -126,7 +135,7 @@ export default function ListingsSearch({ type, initialFilters, onSelectListing }
     <div className="space-y-6 pb-20">
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950 sm:text-3xl">{TYPE_LABELS[type]}{query.trim() && <span className="text-slate-500 font-normal"> in {query.trim()}</span>}</h1>
+          <h1 className="text-2xl font-bold text-slate-950 sm:text-3xl">{heading ?? TYPE_LABELS[type]}{query.trim() && <span className="text-slate-500 font-normal"> in {query.trim()}</span>}</h1>
           <p className="mt-1 text-sm text-slate-500">{firstLoad ? 'Loading…' : `${pagination?.total ?? listings.length} ${(pagination?.total ?? listings.length) === 1 ? 'result' : 'results'}`}{loading && !firstLoad && <span className="ml-2 text-slate-400">· updating…</span>}</p>
         </div>
         <label className="relative w-full sm:max-w-md">
@@ -227,6 +236,14 @@ export default function ListingsSearch({ type, initialFilters, onSelectListing }
             <Select value={minStars} onChange={(event) => setMinStars(Number(event.target.value))} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
               <option value={0}>Any class</option>
               {[3, 4, 5].map((stars) => <option key={stars} value={stars}>{stars} stars{stars < 5 ? ' or more' : ''}</option>)}
+            </Select>
+          </label>}
+
+          {stays && <label className="block space-y-2">
+            <span className="text-xs font-bold text-slate-600">Who can stay</span>
+            <Select value={guestPolicy} onChange={(event) => setGuestPolicy(event.target.value as typeof guestPolicy)} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+              <option value="">Any</option>
+              {Object.entries(GUEST_POLICY_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </Select>
           </label>}
 

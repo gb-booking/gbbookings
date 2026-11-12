@@ -25,9 +25,16 @@ export default function ListingCard({ listing, onSelect, tag, detailed = false }
         {detailed && listing.type === 'car' && listing.carSpecs && (
           <p className="flex items-center gap-2 text-xs font-medium text-slate-500"><Car className="h-4 w-4" /> {listing.carSpecs.category} · {listing.carSpecs.transmission}</p>
         )}
-        <p className={`pt-1 font-bold text-slate-950 ${detailed ? 'text-base' : 'text-sm'}`}>
-          PKR {listing.price.toLocaleString()}{perNight && <span className="text-xs font-normal text-slate-500"> / night</span>}
-        </p>
+        {listing.stayTotal !== undefined ? (
+          <p className={`pt-1 font-bold text-slate-950 ${detailed ? 'text-base' : 'text-sm'}`}>
+            PKR {listing.stayTotal.toLocaleString()}<span className="text-xs font-normal text-slate-500"> for {listing.stayNights} night{listing.stayNights === 1 ? '' : 's'}</span>
+            <span className="block text-[11px] font-normal text-slate-500">Includes fees and taxes</span>
+          </p>
+        ) : (
+          <p className={`pt-1 font-bold text-slate-950 ${detailed ? 'text-base' : 'text-sm'}`}>
+            PKR {listing.price.toLocaleString()}{perNight && <span className="text-xs font-normal text-slate-500"> / night</span>}
+          </p>
+        )}
       </div>
     </article>
   );

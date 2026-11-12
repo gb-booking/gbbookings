@@ -84,10 +84,13 @@ async function request<T>(path: string, init: RequestInit = {}, allowRefresh = t
           }
           await refreshInFlight;
           if (generation !== authGeneration) throw new ApiError('Your account session changed. Please try again.', 401);
-        } catch {
-          // The session is gone; let the app shell drop its signed-in state.
-          if (generation === authGeneration && hasKnownSession) window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
-          throw new ApiError('Your session has expired. Please sign in again.', 401);
+        } catch (error) {
+          // Throttling, network failures and server outages do not invalidate a session.
+          if (error instanceof ApiError && error.status === 401) {
+            if (generation === authGeneration && hasKnownSession) window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+            throw new ApiError('Your session has expired. Please sign in again.', 401);
+          }
+          throw error;
         }
         return request<T>(path, init, false);
       }
@@ -283,6 +286,8 @@ export interface VendorListing {
   carSpecs?: CarSpecs;
   tourSpecs?: TourSpecs;
   instantBook?: boolean;
+  /** Hotels and homestays: percents off for one guest per room and for a non-refundable booking. */
+  ratePlans?: RatePlans;
   /** Fixed-departure tours: bookable start dates. */
   departures?: string[];
   coordinates?: LatLng;
@@ -378,7 +383,7 @@ export type AdminBooking = Booking & { vendorName?: string; platformFee?: number
 export type AdminBookingFilters = { q?: string; status?: string; paymentStatus?: string; type?: string; dispute?: string; from?: string; to?: string };
 
 /** Server-side listing filters; dates/guests only return listings with a free room that fits. */
-export interface ListingFilters { freeCancellation?: 'true'; minStars?: number;
+export interface ListingFilters { freeCancellation?: 'true'; minStars?: number; guestPolicy?: 'everyone' | 'families_only' | 'women_only';
   location?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -416,6 +421,10 @@ export interface RoomAvailability extends RoomLayout {
   stayRule?: string;
   /** The partner's automatic discount already in these prices. */
   dealPercent?: number;
+  /** The single-guest price already in these prices (one guest per room). */
+  singleGuestPercent?: number;
+  /** The non-refundable rate plan for the same room, offered with Pay now only. */
+  nonRefundable?: { percent: number; roomTotal: number; totalPrice: number; charges?: Array<{ name: string; type: 'fee' | 'tax'; amount: number }> };
   nightlyRate: number;
   roomTotal: number;
   /** Car rentals: driver, out-of-city and one-way charges. */
@@ -473,7 +482,12 @@ export interface CreateBookingInput {
   /** Pay now (online) or Pay on arrival. */
   paymentMethod: 'online' | 'pay_at_hotel';
   expectedTotalMinor?: number;
+  /** A non-refundable booking is paid now and cannot be refunded. */
+  ratePlan?: 'standard' | 'non_refundable';
 }
+
+/** Rate plans as Booking.com sets them up: null turns a plan off when saving. */
+export type RatePlans = { singleGuestPercent?: number | null; nonRefundablePercent?: number | null };
 
 export type VendorBookingAction = 'confirm' | 'cancel' | 'complete' | 'no_show' | 'mark_paid' | 'check_in' | 'collect_balance';
 
@@ -700,12 +714,16 @@ export const api = {
     imageIds: string[];
     /** Same photos as imageIds, with order and captions. */
     photos?: PhotoInput[];
+    /** Pay on arrival bookings confirmed without the partner answering each one. */
+    instantBook?: boolean;
+    cancellationPolicy?: string;
+    ratePlans?: RatePlans;
     hotelSpecs?: { hotelType: string; amenities: string[]; facilities: string[]; policies: string[]; checkInTime: string; checkOutTime: string } & PropertyExtras;
   }) {
     return request<{ data: VendorListing }>('/api/v1/vendor/listings', { method: 'POST', body: JSON.stringify(input) });
   },
 
-  updateHotelListing(listingId: string, input: Partial<Pick<VendorListing, 'title' | 'location' | 'description' | 'hotelSpecs'>> & { address?: PropertyAddress; homestaySpecs?: Omit<HomestaySpecsInput, 'stayType'>; carSpecs?: CarSpecsInput; tourSpecs?: TourSpecsInput; departures?: string[]; coordinates?: LatLng; stayInfo?: ListingStayInfoInput; imageIds?: string[]; photos?: PhotoInput[]; cancellationPolicy?: string; instantBook?: boolean; fees?: NonNullable<VendorListing['fees']> }) {
+  updateHotelListing(listingId: string, input: Partial<Pick<VendorListing, 'title' | 'location' | 'description' | 'hotelSpecs'>> & { address?: PropertyAddress; homestaySpecs?: Omit<HomestaySpecsInput, 'stayType'>; carSpecs?: CarSpecsInput; tourSpecs?: TourSpecsInput; departures?: string[]; coordinates?: LatLng; stayInfo?: ListingStayInfoInput; imageIds?: string[]; photos?: PhotoInput[]; cancellationPolicy?: string; instantBook?: boolean; ratePlans?: RatePlans; fees?: NonNullable<VendorListing['fees']> }) {
     return request<{ data: VendorListing }>(`/api/v1/vendor/listings/${encodeURIComponent(listingId)}`, {
       method: 'PATCH', body: JSON.stringify(input),
     }).then((result) => result.data);
@@ -804,6 +822,17 @@ export const api = {
 
   confirmEmailChange(input: { currentChallengeId: string; currentCode: string; newChallengeId: string; newCode: string }) {
     return request<void>('/api/v1/auth/change-email', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  /** Partner sign-in: the account's email must be proved with a code before a partner application or first listing. */
+  getPartnerVerification() {
+    return request<{ data: { verified: boolean; email: string } }>('/api/v1/vendors/partner-verification').then((result) => result.data);
+  },
+  requestPartnerCode() {
+    return request<{ data: { challengeId: string; expiresInSeconds: number } }>('/api/v1/vendors/partner-verification/code', { method: 'POST' }).then((result) => result.data);
+  },
+  confirmPartnerCode(challengeId: string, code: string) {
+    return request<{ data: { verified: boolean; email: string } }>('/api/v1/vendors/partner-verification/confirm', { method: 'POST', body: JSON.stringify({ challengeId, code }) }).then((result) => result.data);
   },
 
   requestPasswordChangeCode() {

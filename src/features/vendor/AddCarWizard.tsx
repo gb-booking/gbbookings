@@ -1,22 +1,21 @@
 import { useState, type ReactNode } from 'react';
-import { Check, LoaderCircle } from 'lucide-react';
 import { api, type LatLng, type VendorListing } from '../../shared/api/api';
 import { LocationPinField } from '../../shared/components/MapPin';
 import { useReasonDialog } from '../../shared/components/ReasonDialog';
 import { PAYMENT_LABELS } from '../../shared/utils/stayInfo';
 import { CarBasicsFields, CarTermsFields, carDraft, carInput, carProblem, DRIVER_LABELS } from './CarFields';
 import PhotoManager, { toPhotoInput, type EditablePhoto } from './PhotoManager';
-import { primaryButton, secondaryButton } from './RoomManager';
+import RegistrationFlow, { BookingModeField, type FlowPart, type FlowStep } from './RegistrationFlow';
 
 const inputClass = 'mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-[15px] font-normal outline-none focus:border-[#006F3C] focus:ring-2 focus:ring-[#006F3C]/15';
+/** As for hotels: at least five photos, checked for size and blur before upload. */
+const MIN_PHOTOS = 5;
 
-type StepId = 'car' | 'base' | 'terms' | 'photos' | 'review';
-const STEPS: Array<[StepId, string, string, string]> = [
-  ['car', 'The car', 'Make, model, seats', 'Which car are you renting out?'],
-  ['base', 'Base & description', 'City, map, description', 'Where is the car based?'],
-  ['terms', 'Price & driver', 'Daily rate, driver, fuel', 'How is it rented?'],
-  ['photos', 'Photos', 'Outside and inside', 'Show guests the car'],
-  ['review', 'Review & submit', 'Checked by GBBookings', 'Check everything, then submit'],
+const PARTS: FlowPart[] = [
+  { name: 'Car details', text: 'The basics. The car, where it is based and how guests find it.', action: 'Add car details' },
+  { name: 'Price & driver', text: 'The daily rate, how many you have, the driver and what guests pay at pickup.', action: 'Add price' },
+  { name: 'Photos', text: 'Show the car outside and inside so guests know what to expect.', action: 'Add photos' },
+  { name: 'Final steps', text: 'Choose how bookings are confirmed before you open for bookings.', action: 'Add final details' },
 ];
 
 function Field({ label, hint, wide, children }: { label: string; hint?: string; wide?: boolean; children: ReactNode }) {
@@ -24,52 +23,92 @@ function Field({ label, hint, wide, children }: { label: string; hint?: string; 
 }
 
 /**
- * Add a car step by step. One listing is one car model; identical cars are its count, so they share one calendar.
- * Nothing is saved until the last step creates the draft (and its single fleet entry), then optionally submits it.
+ * Add a car, one question per page with a hub between parts, like join.booking.com. One listing is one car model;
+ * identical cars are its count, so they share one calendar. Nothing is saved until "Complete registration"
+ * (or "Save as draft") creates the listing and its single fleet entry.
  */
-export default function AddCarWizard({ onDone, onExit }: { onDone: (listing: VendorListing, message: string) => void; onExit: () => void }) {
-  const [step, setStep] = useState(0);
+export default function AddCarWizard({ onDone, onExit, registration }: {
+  onDone: (listing: VendorListing, message: string) => void; onExit: () => void;
+  /** A new partner: business details and documents come last, and submitting them creates and submits the car. */
+  registration?: (onSubmitted: () => void) => ReactNode;
+}) {
   const [car, setCar] = useState(() => carDraft());
   const [base, setBase] = useState({ title: '', location: '', description: '' });
   const [pin, setPin] = useState<LatLng>();
   const [fleet, setFleet] = useState({ dailyRate: 0, count: 1 });
   const [photos, setPhotos] = useState<EditablePhoto[]>([]);
+  const [instantBook, setInstantBook] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { askReason, dialog } = useReasonDialog();
-  const id = STEPS[step][0];
-  const defaultTitle = [car.make.trim(), car.model.trim(), car.year].filter(Boolean).join(' ');
+  // Make and model first; a year on its own is not a name.
+  const defaultTitle = car.make.trim() || car.model.trim() ? [car.make.trim(), car.model.trim(), car.year].filter(Boolean).join(' ') : '';
   const title = base.title.trim() || defaultTitle;
 
-  const problems: Record<StepId, string> = {
-    car: carProblem(car, 'car'),
-    base: base.location.trim().length < 2 ? 'Add the city the car is based in.' : base.description.trim().length < 20 ? 'Write a description of at least 20 characters.' : '',
-    terms: fleet.dailyRate <= 0 ? 'Set the price per day.' : fleet.count < 1 ? 'Set how many of these cars you have.' : carProblem(car, 'terms'),
-    photos: photos.length === 0 ? 'Add at least one photo.' : '',
-    review: '',
-  };
-  const firstProblem = (upTo: number) => STEPS.slice(0, upTo).map(([stepId]) => problems[stepId]).find(Boolean);
-  const go = (next: number) => {
-    const blocking = firstProblem(next);
-    if (next > step && blocking) { setError(blocking); return; }
-    setError(''); setStep(next); window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const steps: FlowStep[] = [
+    { id: 'car', part: 'Car details', title: 'Which car are you renting out?', intro: 'Guests filter by type, seats and transmission.', wide: true,
+      tip: ['Several of the same car?', 'List the model once. You set how many identical cars you have on the price page, and they share one calendar.'],
+      problem: carProblem(car, 'car'), content: <CarBasicsFields value={car} onChange={setCar} /> },
+    { id: 'base', part: 'Car details', title: 'Where is the car based?', intro: 'The city where guests normally pick it up.',
+      tip: ['What makes a good description?', 'Its condition and what it is good for, such as Deosai or Khunjerab, and the driver\'s experience.'],
+      problem: base.location.trim().length < 2 ? 'Add the city the car is based in.' : base.description.trim().length < 20 ? 'Write a description of at least 20 characters.' : '',
+      content: <div className="grid gap-4">
+        <Field label="Base city" hint="e.g. Skardu or Gilgit."><input required maxLength={240} className={inputClass} placeholder="Skardu, Gilgit-Baltistan" value={base.location} onChange={(event) => setBase({ ...base, location: event.target.value })} /></Field>
+        <Field label="Listing name" hint={`Leave empty to use "${defaultTitle || 'make model year'}".`}><input maxLength={160} className={inputClass} placeholder={defaultTitle} value={base.title} onChange={(event) => setBase({ ...base, title: event.target.value })} /></Field>
+        <Field label="Description"><textarea required minLength={20} maxLength={10000} className={`${inputClass} min-h-28 py-3`} value={base.description} onChange={(event) => setBase({ ...base, description: event.target.value })} /></Field>
+      </div> },
+    { id: 'pin', part: 'Car details', title: 'Pin the pickup point on the map', intro: 'Guests use it to find you on the day.',
+      tip: ['Is the red pin in the wrong place?', 'Tap the map where guests collect the car. Use your current location only while you are there.'],
+      problem: pin ? '' : 'Drop a pin where guests pick the car up.', content: <LocationPinField value={pin} onChange={setPin} location={base.location} /> },
+    { id: 'terms', part: 'Price & driver', title: 'How is it rented?', intro: 'The daily rate is for the car. A driver, trips outside the base city and one-way drop-off are added on top.', wide: true,
+      tip: ['How do I get paid?', 'Pay on arrival guests pay you at pickup. Pay now money is held by GBBookings and paid out to you after the rental.'],
+      problem: fleet.dailyRate <= 0 ? 'Set the price per day.' : fleet.count < 1 ? 'Set how many of these cars you have.' : carProblem(car, 'terms'),
+      content: <div className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Price per day (PKR)"><input type="number" required min={1} max={1000000} className={inputClass} value={fleet.dailyRate} onChange={(event) => setFleet({ ...fleet, dailyRate: Number(event.target.value) })} /></Field>
+          <Field label="How many of this car?" hint="We never book more than you have."><input type="number" required min={1} max={500} className={inputClass} value={fleet.count} onChange={(event) => setFleet({ ...fleet, count: Number(event.target.value) })} /></Field>
+        </div>
+        <CarTermsFields value={car} onChange={setCar} />
+      </div> },
+    { id: 'photos', part: 'Photos', title: 'What does the car look like?', intro: `Upload at least ${MIN_PHOTOS} photos: outside, inside, seats and boot. The first is the cover.`,
+      tip: ['What if I don\'t have professional photos?', 'A phone camera is fine. Shoot in daylight, with the car clean, and only use photos you took.'],
+      problem: photos.length < MIN_PHOTOS ? `Upload at least ${MIN_PHOTOS} photos (${photos.length} so far).` : '',
+      content: <PhotoManager photos={photos} onChange={setPhotos} max={20} min={MIN_PHOTOS} qualityCheck label="Car photos" onUploadingChange={setUploading} /> },
+    { id: 'howwork', part: 'Final steps', title: 'How bookings work', intro: 'Some important info before you list your car on GBBookings.',
+      tip: ['Can I change this later?', 'Yes. Switch between instant confirmation and request to book any time from your dashboard.'],
+      problem: '', content: <BookingModeField value={instantBook} onChange={setInstantBook} noun="car" /> },
+  ];
+
+  const summary: Array<[string, string, string]> = [
+    ['Car', `${title || '—'} · ${car.category} · ${car.transmission} · ${car.fuelType} · ${car.seats} seats`, 'car'],
+    ['Base', `${base.location || '—'}${pin ? ' · map pin set' : ''}`, 'base'],
+    ['Price', `PKR ${fleet.dailyRate.toLocaleString()} per day · ${fleet.count} car${fleet.count === 1 ? '' : 's'}`, 'terms'],
+    ['Driver', `${DRIVER_LABELS[car.driverMode]}${car.driverMode !== 'self_drive' && car.driverPerDay ? ` · driver PKR ${car.driverPerDay.toLocaleString()}/day` : ''}${car.driverMode !== 'with_driver' ? ` · self-drive from age ${car.minDriverAge}, deposit PKR ${car.deposit.toLocaleString()}` : ''}`, 'terms'],
+    ['Payment at pickup', car.paymentMethods.map((method) => PAYMENT_LABELS[method]).join(', ') || '—', 'terms'],
+    ['Photos', `${photos.length} photo${photos.length === 1 ? '' : 's'}`, 'photos'],
+    ['Bookings', instantBook ? 'Instant confirmation' : 'Request to book', 'howwork'],
+  ];
+
   const exit = async () => {
-    if ((car.make || base.description || photos.length) && await askReason({ title: 'Leave without saving?', destructive: true, confirmLabel: 'Discard car', description: 'Nothing has been saved yet. Your entries on these steps will be lost.' }) === null) return;
+    if ((car.make || base.description || photos.length) && await askReason({ title: 'Leave without saving?', destructive: true, confirmLabel: 'Discard car', description: 'Nothing has been saved yet. Use Save as draft on the overview to keep it.' }) === null) return;
     onExit();
   };
 
   const finish = async (submit: boolean) => {
-    const blocking = firstProblem(STEPS.length);
-    if (blocking) { setError(blocking); return; }
+    const blocking = steps.map((item) => item.problem).find(Boolean);
+    if (submit && blocking) { setError(blocking); return; }
+    if (!submit && (!car.make.trim() || base.description.trim().length < 20 || !photos.length || fleet.dailyRate <= 0)) {
+      setError('To save a draft, add the car, its description, its price and at least one photo.');
+      return;
+    }
     setBusy(true); setError('');
     let created: VendorListing | null = null;
     try {
       created = (await api.createHotelListing({
         type: 'car', title, location: base.location.trim(), description: base.description.trim(), price: fleet.dailyRate,
         imageIds: photos.flatMap((photo) => (photo.mediaId ? [photo.mediaId] : [])), photos: toPhotoInput(photos),
-        carSpecs: carInput(car), stayInfo: { paymentMethods: car.paymentMethods }, ...(pin ? { coordinates: pin } : {}),
+        carSpecs: carInput(car), stayInfo: { paymentMethods: car.paymentMethods }, instantBook, ...(pin ? { coordinates: pin } : {}),
       })).data;
       // The car's single fleet entry: seats are its capacity, the count is how many identical cars there are.
       await api.addHotelRoom(created.id, {
@@ -84,76 +123,11 @@ export default function AddCarWizard({ onDone, onExit }: { onDone: (listing: Ven
     } finally { setBusy(false); }
   };
 
-  const reviewRows: Array<[string, string, number]> = [
-    ['Car', `${title} · ${car.category} · ${car.transmission} · ${car.fuelType} · ${car.seats} seats`, 0],
-    ['Base', `${base.location || '—'}${pin ? ' · map pin set' : ''}`, 1],
-    ['Price', `PKR ${fleet.dailyRate.toLocaleString()} per day · ${fleet.count} car${fleet.count === 1 ? '' : 's'}`, 2],
-    ['Driver', `${DRIVER_LABELS[car.driverMode]}${car.driverMode !== 'self_drive' && car.driverPerDay ? ` · driver PKR ${car.driverPerDay.toLocaleString()}/day` : ''}${car.driverMode !== 'with_driver' ? ` · self-drive from age ${car.minDriverAge}, deposit PKR ${car.deposit.toLocaleString()}` : ''}`, 2],
-    ['Extras', [car.fuelIncluded ? 'Fuel included' : 'Fuel paid by guest', car.chargesOutside ? `outside base city +PKR ${car.outsideCityPerDay.toLocaleString()}/day` : '', car.oneWay === 'flat' ? `one-way PKR ${car.oneWayFee.toLocaleString()}` : car.oneWay === 'on_request' ? 'one-way on request' : 'no one-way'].filter(Boolean).join(' · '), 2],
-    ['Payment at pickup', car.paymentMethods.map((method) => PAYMENT_LABELS[method]).join(', ') || '—', 2],
-    ['Photos', `${photos.length} photo${photos.length === 1 ? '' : 's'}`, 3],
-  ];
-
-  return (
-    <div className="flex flex-wrap items-start gap-7">
-      {dialog}
-      <nav aria-label="Steps" className="flex w-full flex-col gap-1 lg:w-60 lg:shrink-0">
-        {STEPS.map(([stepId, name, hint], index) => {
-          const done = index < step && !problems[stepId];
-          return (
-            <button key={stepId} type="button" onClick={() => go(index)} aria-current={index === step ? 'step' : undefined}
-              className={`flex min-h-14 items-start gap-3 rounded-xl px-2.5 py-2.5 text-left ${index === step ? 'border border-emerald-200 bg-white' : 'hover:bg-white/60'}`}>
-              <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${done ? 'bg-[#006F3C] text-white' : index === step ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500'}`}>{done ? <Check className="size-4" /> : index + 1}</span>
-              <span><span className={`block text-sm font-bold ${index > step ? 'text-slate-500' : 'text-slate-900'}`}>{name}</span><span className="text-xs text-slate-500">{hint}</span></span>
-            </button>
-          );
-        })}
-        <button type="button" onClick={exit} className="mt-3 min-h-11 rounded-lg px-2.5 text-left text-sm font-semibold text-slate-500 hover:text-slate-800">Cancel and exit</button>
-      </nav>
-
-      <div className="min-w-0 flex-[999_1_480px] space-y-5">
-        <div>
-          <p className="text-sm font-bold text-[#006F3C]">Step {step + 1} of {STEPS.length}</p>
-          <h2 className="mt-1.5 text-2xl font-extrabold tracking-tight sm:text-3xl">{STEPS[step][3]}</h2>
-        </div>
-        {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          {id === 'car' && <CarBasicsFields value={car} onChange={setCar} />}
-          {id === 'base' && <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Base city" hint="Where guests normally pick the car up, e.g. Skardu or Gilgit."><input required maxLength={240} className={inputClass} placeholder="Skardu, Gilgit-Baltistan" value={base.location} onChange={(event) => setBase({ ...base, location: event.target.value })} /></Field>
-            <Field label="Listing name" hint={`Leave empty to use "${defaultTitle || 'make model year'}".`}><input maxLength={160} className={inputClass} placeholder={defaultTitle} value={base.title} onChange={(event) => setBase({ ...base, title: event.target.value })} /></Field>
-            <Field label="Description" hint="Condition, what the car is good for (e.g. Deosai, Khunjerab), the driver’s experience." wide><textarea required minLength={20} maxLength={10000} className={`${inputClass} min-h-28 py-3`} value={base.description} onChange={(event) => setBase({ ...base, description: event.target.value })} /></Field>
-            <div className="sm:col-span-2"><LocationPinField value={pin} onChange={setPin} location={base.location} /></div>
-          </div>}
-          {id === 'terms' && <div className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Price per day (PKR)" hint="For the car. A driver, trips outside the base city and one-way drop-off are added on top as you set below."><input type="number" required min={1} max={1000000} className={inputClass} value={fleet.dailyRate} onChange={(event) => setFleet({ ...fleet, dailyRate: Number(event.target.value) })} /></Field>
-              <Field label="How many of this car?" hint="Identical cars share one listing and calendar. We never book more than you have."><input type="number" required min={1} max={500} className={inputClass} value={fleet.count} onChange={(event) => setFleet({ ...fleet, count: Number(event.target.value) })} /></Field>
-            </div>
-            <CarTermsFields value={car} onChange={setCar} />
-          </div>}
-          {id === 'photos' && <PhotoManager photos={photos} onChange={setPhotos} max={20} label="Car photos" onUploadingChange={setUploading} />}
-          {id === 'review' && <dl className="divide-y divide-slate-100 text-sm">
-            {reviewRows.map(([label, text, target]) => (
-              <div key={label} className="grid gap-1 py-3 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-center">
-                <dt className="font-semibold text-slate-500">{label}</dt><dd className="text-slate-900">{text}</dd>
-                <button type="button" onClick={() => go(target)} className="min-h-11 justify-self-start text-sm font-semibold text-[#006F3C] underline">Edit</button>
-              </div>
-            ))}
-          </dl>}
-        </div>
-
-        <div className="flex flex-wrap justify-between gap-3">
-          <button type="button" disabled={busy || step === 0} onClick={() => go(step - 1)} className={secondaryButton}>Back</button>
-          {id === 'review'
-            ? <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={busy || uploading} onClick={() => finish(false)} className={secondaryButton}>Save as draft</button>
-                <button type="button" disabled={busy || uploading} onClick={() => finish(true)} className={primaryButton}>{busy && <LoaderCircle className="size-4 animate-spin" />}Submit for review</button>
-              </div>
-            : <button type="button" disabled={uploading} onClick={() => go(step + 1)} className={primaryButton}>Continue</button>}
-        </div>
-      </div>
-    </div>
-  );
+  return <>
+    {dialog}
+    <RegistrationFlow name={title || 'New car'} subtitle={base.location} parts={PARTS} steps={steps} summary={summary}
+      busy={busy} uploading={uploading} error={error} setError={setError}
+      onSaveDraft={() => void finish(false)} onSubmit={() => void finish(true)} onExit={exit}
+      verification={registration?.(() => void finish(true))} />
+  </>;
 }

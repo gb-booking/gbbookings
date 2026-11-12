@@ -70,6 +70,7 @@ function bookingEmail(title: string, name: string, message: string, booking: any
     ...(booking.arrivalTime ? [['Arrival time', booking.arrivalTime] as [string, string]] : []),
     ...(booking.meals?.length ? [['Meals', booking.meals.map((meal: any) => meal.type).join(', ')] as [string, string]] : []),
     ...(booking.status === 'confirmed' && booking.listingSnapshot.phone ? [[booking.tour ? 'Tour partner phone / WhatsApp' : 'Property phone / WhatsApp', booking.listingSnapshot.phone] as [string, string]] : []),
+    ...(booking.status === 'confirmed' && booking.listingSnapshot.arrivalNote ? [['Getting there', booking.listingSnapshot.arrivalNote] as [string, string]] : []),
     ...(booking.coupon ? [['Promo code', `${booking.coupon.code} (−${booking.pricing.currency} ${((booking.pricing.discountMinor ?? 0) / 100).toLocaleString('en-PK')})`] as [string, string]] : []),
     ...(booking.pricing.charges ?? []).map((line: any) => [line.name, `${booking.pricing.currency} ${(line.amountMinor / 100).toLocaleString('en-PK')}`] as [string, string]),
     ['Total', `${booking.pricing.currency} ${(booking.pricing.totalMinor / 100).toLocaleString('en-PK')}`],

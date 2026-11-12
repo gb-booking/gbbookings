@@ -6,7 +6,7 @@ import { inTransaction } from '../../database/transaction.js';
 import { MediaModel } from '../../models/media.model.js';
 import { UserModel } from '../../models/user.model.js';
 import { VendorMemberModel } from '../../models/vendor-member.model.js';
-import { VendorModel } from '../../models/vendor.model.js';
+import { VendorModel, type VendorRecord } from '../../models/vendor.model.js';
 import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import type { SessionMetadata } from '../auth/auth.service.js';
@@ -16,6 +16,7 @@ import { isCloudinaryConfigured, signedDownloadUrl } from '../media/cloudinary.s
 import { notifyVendorDecision } from './vendor-notifications.js';
 import { canAccess } from './member-access.js';
 import { runIdentityCheck } from './identity-check.js';
+import { createOtpChallenge, consumeOtpChallenge } from '../otp/otp.service.js';
 
 // Hotels prove a registered business; homestay hosts are usually families, verified by CNIC and proof of the property.
 const REQUIRED_DOCUMENTS: Record<string, string[]> = {
@@ -73,6 +74,7 @@ export async function createVendorApplication(userId: string, input: any, metada
   const user = await UserModel.findOne({ _id: userId, status: 'active', deletedAt: null });
   if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account was not found.');
   if (!user.emailVerifiedAt) throw new AppError(409, 'EMAIL_VERIFICATION_REQUIRED', 'Verify your email before registering as a vendor.');
+  await assertPartnerVerified(userId);
   const vendor = await inTransaction(async (session) => {
     // Lock the user before checking membership; simultaneous applications cannot create two organizations.
     // The vendor_owner role is only granted when an admin approves the application.
@@ -122,7 +124,7 @@ export async function attachVendorDocument(userId: string, input: { type: string
   if (!['draft', 'rejected'].includes(vendor.status)) throw new AppError(409, 'VENDOR_PROFILE_LOCKED', 'Documents cannot be changed during review.');
   const media = await MediaModel.findOne({ publicId: input.mediaId, ownerId: userId, resourceType: 'document', status: 'ready', deletedAt: null });
   if (!media) throw new AppError(404, 'MEDIA_NOT_FOUND', 'A ready document owned by this user was not found.');
-  vendor.verificationDocuments = vendor.verificationDocuments.filter((document: any) => document.type !== input.type);
+  vendor.set('verificationDocuments', vendor.verificationDocuments.filter((document: any) => document.type !== input.type));
   vendor.verificationDocuments.push({ type: input.type, mediaId: media._id, status: 'pending' });
   await vendor.save();
   await recordAuditEvent({
@@ -167,7 +169,8 @@ export async function acceptPartnerAgreement(userId: string, version: string, me
   const { vendor, membership } = await getOwnVendor(userId);
   if (membership.role !== 'owner') throw new AppError(403, 'PERMISSION_DENIED', 'Only the business owner can accept the partner agreement.');
   if (version !== PARTNER_AGREEMENT_VERSION) throw new AppError(409, 'AGREEMENT_OUTDATED', 'The partner agreement has been updated. Reload the page and read the latest version.');
-  vendor.agreement = { version, acceptedAt: new Date(), acceptedBy: userId, ipAddress: metadata.ipAddress, userAgent: metadata.userAgent };
+  // Mongoose casts the user id string to an ObjectId.
+  vendor.set('agreement', { version, acceptedAt: new Date(), acceptedBy: userId, ipAddress: metadata.ipAddress, userAgent: metadata.userAgent });
   await vendor.save();
   await recordAuditEvent({ actorId: userId, actorType: 'user', action: 'vendor.agreement_accepted', resourceType: 'vendor', resourceId: vendor.publicId, ...metadata, metadata: { version } });
   return serializeVendor(vendor);
@@ -198,12 +201,13 @@ export async function decideVendorChanges(adminUserId: string, vendorId: string,
   await requireDatabase();
   const vendor = await VendorModel.findOne({ publicId: vendorId, deletedAt: null });
   if (!vendor?.pendingChanges?.requestedAt) throw new AppError(404, 'CHANGE_REQUEST_NOT_FOUND', 'This business has no pending change request.');
-  const changes = vendor.pendingChanges.toObject ? vendor.pendingChanges.toObject() : vendor.pendingChanges;
+  const pending = vendor.pendingChanges as any;
+  const changes = pending.toObject ? pending.toObject() : pending;
   if (input.decision === 'approved') {
     const { requestedAt, address, payoutProfile, ...fields } = changes;
     Object.assign(vendor, fields);
     if (payoutProfile?.iban) vendor.payoutProfile = payoutProfile;
-    vendor.address = { ...(vendor.address?.toObject?.() ?? vendor.address ?? {}), ...address };
+    vendor.set('address', { ...((vendor.address as any)?.toObject?.() ?? vendor.address ?? {}), ...address });
     vendor.changeRejectionReason = null;
   } else {
     vendor.changeRejectionReason = input.notes;
@@ -219,7 +223,7 @@ export async function decideVendorChanges(adminUserId: string, vendorId: string,
   return serializeVendor(vendor);
 }
 
-export async function listVendorApplications(query: { status?: string; changes?: 'pending'; page: number; limit: number }) {
+export async function listVendorApplications(query: { status?: VendorRecord['status']; changes?: 'pending'; page: number; limit: number }) {
   await requireDatabase();
   const filter = { deletedAt: null, ...(query.status ? { status: query.status } : {}), ...(query.changes ? { 'pendingChanges.requestedAt': { $exists: true } } : {}) };
   const [vendors, total] = await Promise.all([
@@ -261,7 +265,7 @@ export async function vendorDocumentSource(vendorId: string, type: string) {
   };
 }
 
-export async function decideVendorApplication(adminUserId: string, vendorId: string, input: { decision: string; notes: string }, metadata: SessionMetadata) {
+export async function decideVendorApplication(adminUserId: string, vendorId: string, input: { decision: 'approved' | 'rejected' | 'suspended'; notes: string }, metadata: SessionMetadata) {
   await requireDatabase();
   const vendor = await VendorModel.findOne({ publicId: vendorId, deletedAt: null });
   if (!vendor) throw new AppError(404, 'VENDOR_NOT_FOUND', 'Vendor organization was not found.');
@@ -273,7 +277,7 @@ export async function decideVendorApplication(adminUserId: string, vendorId: str
   }
   vendor.status = input.decision;
   vendor.reviewedAt = new Date();
-  vendor.reviewedBy = adminUserId;
+  vendor.set('reviewedBy', adminUserId);
   vendor.verificationNotes = input.notes;
   vendor.rejectionReason = input.decision === 'rejected' ? input.notes : null;
   // Approval grants the owner the vendor role (partner dashboard, listings); suspension takes it away again.
@@ -367,4 +371,38 @@ export async function removeTeamMember(userId: string, memberId: string, metadat
     await UserModel.updateOne({ _id: member.userId }, { $pull: { roles: 'vendor_staff' } }, { session });
   });
   await recordAuditEvent({ actorId: userId, actorType: 'user', action: 'vendor.member_removed', resourceType: 'vendor', resourceId: vendor.publicId, ...metadata, metadata: { memberId } });
+}
+
+/**
+ * Partner sign-in check, like Booking.com's separate partner account: before anyone starts a partner application or
+ * a first listing, they prove the account's email with a one-time code on the partner page. Done once per account.
+ */
+
+export async function partnerVerificationStatus(userId: string) {
+  await requireDatabase();
+  const user = await UserModel.findOne({ _id: userId, status: 'active', deletedAt: null });
+  if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account was not found.');
+  return { verified: Boolean(user.partnerVerifiedAt), email: user.email };
+}
+
+export async function requestPartnerVerificationCode(userId: string, metadata: SessionMetadata) {
+  await requireDatabase();
+  const user = await UserModel.findOne({ _id: userId, status: 'active', deletedAt: null });
+  if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account was not found.');
+  return createOtpChallenge({ userId, channel: 'email', destination: user.email, recipientName: user.name, purpose: 'partner_verification', requestedIp: metadata.ipAddress });
+}
+
+export async function confirmPartnerVerification(userId: string, challengeId: string, code: string, metadata: SessionMetadata) {
+  await requireDatabase();
+  await consumeOtpChallenge(challengeId, code, 'partner_verification', userId);
+  const user = await UserModel.findOneAndUpdate({ _id: userId, status: 'active', deletedAt: null }, { $set: { partnerVerifiedAt: new Date(), emailVerifiedAt: new Date() } }, { new: true });
+  if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account was not found.');
+  await recordAuditEvent({ actorId: userId, actorType: 'user', action: 'vendor.partner_email_verified', resourceType: 'user', resourceId: user.publicId, ...metadata });
+  return { verified: true, email: user.email };
+}
+
+/** Starting a partner application or a first listing needs the partner email check. */
+export async function assertPartnerVerified(userId: string) {
+  const user = await UserModel.findOne({ _id: userId }).select('partnerVerifiedAt').lean() as any;
+  if (!user?.partnerVerifiedAt) throw new AppError(403, 'PARTNER_VERIFICATION_REQUIRED', 'Verify your email on the partner page before listing a property.');
 }

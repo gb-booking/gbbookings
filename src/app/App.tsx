@@ -11,6 +11,7 @@ import { flashToast } from '../shared/components/Toaster';
 import AccountActionPage, { isAccountActionPath } from '../features/auth/AccountActionPage';
 import { announcePaymentReturn } from '../features/booking/paymentTab';
 import { toast } from '../shared/components/Toaster';
+import { stayTypePage } from '../shared/utils/rooms';
 
 const ExploreSection = lazy(() => import('../features/catalog/ExploreSection'));
 const ListingsSearch = lazy(() => import('../features/catalog/ListingsSearch'));
@@ -25,9 +26,12 @@ const CheckoutFlow = lazy(() => import('../features/booking/CheckoutFlow'));
 const UserDashboard = lazy(() => import('../features/account/UserDashboard'));
 const VendorDashboard = lazy(() => import('../features/vendor/VendorDashboard'));
 const BecomePartner = lazy(() => import('../features/partner/BecomePartner'));
+const PartnerGate = lazy(() => import('../features/partner/PartnerGate'));
 const AdminDashboard = lazy(() => import('../features/admin/AdminDashboard'));
 const AiChat = lazy(() => import('../features/planner/AiChat'));
 const LegalPage = lazy(() => import('../features/support/LegalPage'));
+const AboutPage = lazy(() => import('../features/support/AboutPage'));
+const TownPage = lazy(() => import('../features/catalog/TownPage'));
 const Inbox = lazy(() => import('../features/messages/Inbox'));
 // A separate chunk: only signed-in guests and partners hold a realtime connection.
 const RealtimeBridge = lazy(() => import('../shared/api/RealtimeBridge'));
@@ -51,7 +55,7 @@ const homeDashboard = (roles: string[]) =>
 
 // URL <-> view sync so refresh, deep links and the browser Back button work.
 // ponytail: hand-rolled History API routing; move to a router library if routes need more params than a listing id.
-const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'offers', 'bookings', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement']);
+const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'offers', 'bookings', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
 const SEARCH_TYPES = ['hotel', 'car', 'tour', 'homestay', 'destination', 'offer'] as const;
 type SearchType = typeof SEARCH_TYPES[number];
 
@@ -78,6 +82,9 @@ function readLocation() {
     const type = query.get('type') as SearchType;
     return { view: 'search', type: SEARCH_TYPES.includes(type) ? type : undefined, destination: query.get('destination') ?? undefined };
   }
+  // Town pages (/place/Skardu) and property-type pages (/stays/resort); `slug` names which one.
+  if (first === 'place' && id) return { view: 'place', slug: decodeURIComponent(id) };
+  if (first === 'stays' && id && stayTypePage(id)) return { view: 'stay-type', slug: id };
   if (first === 'list-property') return { view: 'become-partner' }; // old links
   // Back from Safepay: /bookings?payment=<booking id>[&cancelled=1]. Read now; the first URL sync drops the query.
   // /user-dashboard is the old address of the bookings page.
@@ -93,7 +100,9 @@ function readLocation() {
 export type SearchExtra = { category?: string; sort?: 'price-low'; withDriver?: boolean };
 const PAYMENT_FLOOR = 'gb-payment-floor';
 
-function urlForView(view: string, listingId: string | null, search: { type: string; destination: string }) {
+function urlForView(view: string, listingId: string | null, search: { type: string; destination: string }, slug = '') {
+  if (view === 'place' && slug) return `/place/${encodeURIComponent(slug)}`;
+  if (view === 'stay-type' && slug) return `/stays/${slug}`;
   if (view === 'details' && listingId) return `/listing/${encodeURIComponent(listingId)}`;
   if (view === 'checkout' && listingId) return `/listing/${encodeURIComponent(listingId)}/checkout`;
   if (view === 'search') return `/search?${new URLSearchParams({ type: search.type, destination: search.destination })}`;
@@ -105,6 +114,7 @@ export default function App() {
   const [view, setView] = useState<string>(initialLocation.view); // 'explore' (Homepage) | 'homestays' | 'hotels' | 'cars' | 'tours' | 'destinations' | 'offers' | 'search' | 'details' | 'checkout' | 'user-dashboard' | 'vendor-dashboard' | 'ai-planner' | 'support'
   const [selectedListingId, setSelectedListingId] = useState<string | null>(initialLocation.listingId ?? null);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [pageSlug, setPageSlug] = useState<string>(initialLocation.slug ?? '');
 
   // Search parameters to carry from landing page search widget
   const [searchParams, setSearchParams] = useState({
@@ -121,12 +131,12 @@ export default function App() {
   useEffect(() => {
     // Email actions must retain their token until the lazy action dialog reads it.
     if (isAccountActionPath()) return;
-    const url = urlForView(view, selectedListingId, searchParams);
+    const url = urlForView(view, selectedListingId, searchParams, pageSlug);
     if (url !== window.location.pathname + window.location.search) {
       window.history[isFirstUrlSync.current ? 'replaceState' : 'pushState'](null, '', url);
     }
     isFirstUrlSync.current = false;
-  }, [view, selectedListingId, searchParams.type, searchParams.destination]);
+  }, [view, selectedListingId, searchParams.type, searchParams.destination, pageSlug]);
 
   // Back from Safepay. Normally this is the payment's own tab, so the main tab takes over and this one closes.
   // If the browser blocked that tab, Safepay is in this tab's history, so Back gets a floor that bounces forward again.
@@ -153,6 +163,7 @@ export default function App() {
       if (event.state === PAYMENT_FLOOR) { window.history.pushState(null, '', '/bookings'); setView('bookings'); return; }
       const next = readLocation();
       if (next.listingId) setSelectedListingId(next.listingId);
+      if (next.slug) setPageSlug(next.slug);
       if (next.view === 'checkout') setBookingParams((current) => current ?? savedCheckout(next.listingId!));
       if (next.view === 'search') {
         setSearchParams((prev) => ({ ...prev, type: next.type ?? prev.type, destination: next.destination ?? prev.destination }));
@@ -326,8 +337,16 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openPage = (next: 'place' | 'stay-type', slug: string) => {
+    setPageSlug(slug);
+    setView(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Footer links: a search with the filter already applied, or a page and the part of it to scroll to.
   const handleFooterLink = (v: string, params?: { type?: SearchType; destination?: string; extra?: SearchExtra; section?: string }) => {
+    if (v === 'place' && params?.destination) { openPage('place', params.destination); return; }
+    if (v === 'stay-type' && params?.destination) { openPage('stay-type', params.destination); return; }
     if (params?.type) { handleTriggerSearch({ ...searchParams, type: params.type, destination: params.destination ?? '', dates: '', guests: 0, experience: undefined, extra: params.extra }); return; }
     handleNavigation(v);
     if (params?.section) window.setTimeout(() => document.getElementById(params.section!)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
@@ -352,6 +371,10 @@ export default function App() {
       setView('bookings');
     } else if (v === 'dashboard-vendor' || v === 'vendor-dashboard') {
       setView(isVendor ? 'vendor-dashboard' : 'become-partner');
+    } else if (v === 'become-partner' && !isVendor && view !== 'become-partner') {
+      // Like Booking.com, the partner side opens in its own tab, behind its own sign-in and email code.
+      window.open('/become-partner', '_blank', 'noopener');
+      return;
     } else {
       setView(v);
     }
@@ -465,6 +488,16 @@ export default function App() {
           </section>
         ) : (<>
         {(view === 'terms' || view === 'privacy' || view === 'refunds' || view === 'service' || view === 'partner-agreement') && <LegalPage policy={view} />}
+        {view === 'about' && <AboutPage onNavigate={handleNavigation} />}
+        {view === 'place' && pageSlug && (
+          <TownPage key={pageSlug} town={pageSlug} onSelectListing={handleSelectListing}
+            onSeeAll={(type, town) => handleTriggerSearch({ ...searchParams, type, destination: town, dates: '', guests: 0, experience: undefined, extra: undefined })} />
+        )}
+        {view === 'stay-type' && stayTypePage(pageSlug) && (() => {
+          const page = stayTypePage(pageSlug)!;
+          return <ListingsSearch key={`stays|${page.slug}`} type={page.type} heading={page.title} onSelectListing={handleSelectListing}
+            initialFilters={{ destination: '', startDate: '', endDate: '', extra: { guestCount: 0, category: page.name } }} />;
+        })()}
         {view === 'explore' && (
           <ExploreSection 
             setView={handleNavigation}
@@ -610,12 +643,15 @@ export default function App() {
           <SupportCentre />
         )}
 
-        {view === 'become-partner' && (
-          <BecomePartner key={userId} isLoggedIn={isLoggedIn} isPartner={isVendor}
-            onSignIn={() => handleOpenAuthModal('signin')}
-            onOpenDashboard={() => { refreshAccount(); setView('vendor-dashboard'); }}
-            onAccountChange={refreshAccount}
-            onSupport={() => handleNavigation('support')} />
+        {view === 'become-partner' && (!authChecked
+          ? <div className="min-h-[40vh] animate-pulse rounded-lg bg-slate-100" aria-label="Loading" />
+          : <PartnerGate key={userId} isLoggedIn={isLoggedIn} isPartner={isVendor} onSignIn={(mode) => handleOpenAuthModal(mode)}>
+            <BecomePartner key={userId} isLoggedIn={isLoggedIn} isPartner={isVendor}
+              onSignIn={() => handleOpenAuthModal('signin')}
+              onOpenDashboard={() => { refreshAccount(); setView('vendor-dashboard'); }}
+              onAccountChange={refreshAccount}
+              onSupport={() => handleNavigation('support')} />
+          </PartnerGate>
         )}
         </>)}
         </Suspense>

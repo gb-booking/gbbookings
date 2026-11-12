@@ -9,7 +9,7 @@ import { recordAuditEvent } from '../audit/audit.service.js';
 import type { SessionMetadata } from '../auth/auth.service.js';
 import { todayInPakistan } from '../bookings/stay-dates.js';
 import { shownEnd } from '../bookings/rental.js';
-import { MEMBER_ACCESS } from '../vendors/member-access.js';
+import { vendorIdsFor } from '../vendors/member-access.js';
 
 export const REVIEW_WINDOW_DAYS = 30;
 
@@ -121,9 +121,9 @@ export async function listListingReviews(listingPublicId: string, page: number, 
 }
 
 async function partnerVendorIds(userId: string) {
-  const memberships = await VendorMemberModel.find({ userId, status: 'active', deletedAt: null, role: { $in: MEMBER_ACCESS.listings } }).select('vendorId').lean() as any[];
-  if (!memberships.length) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Only the owner and managers can manage reviews.');
-  return memberships.map((membership) => membership.vendorId);
+  const vendorIds = await vendorIdsFor(userId, 'listings');
+  if (!vendorIds.length) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Only the owner and managers can manage reviews.');
+  return vendorIds;
 }
 
 /** Reviews of the partner's properties, newest first, including hidden ones (so they know what was removed). */

@@ -6,6 +6,7 @@ import { MEMBER_ACCESS } from '../vendors/member-access.js';
 
 /** Works on serverless hosts: Inngest holds the browser connections, the API only publishes. Without keys the inbox polls. */
 const PUBLISH_WAIT_MS = 1500;
+let warnedOff = false;
 
 export async function publishToUser(userId: string, payload: Record<string, unknown>) {
   if (!inngestEnabled()) return;
@@ -24,16 +25,11 @@ export async function publishToVendorTeam(vendorId: unknown, payload: Record<str
 export async function realtimeToken(userId: string) {
   if (!inngestEnabled()) throw new AppError(503, 'REALTIME_OFF', 'Realtime is not configured.');
   try {
-    try {
     return { channel: `user:${userId}`, token: await getClientSubscriptionToken(inngest, { channel: userChannel({ userId }), topics: ['message'] }) };
   } catch (error) {
     // Locally this means the Inngest dev server is not running (npm run dev:inngest).
-    console.warn(`Realtime is off, the inbox will poll instead: ${(error as Error).message}`);
-    throw new AppError(503, 'REALTIME_OFF', 'Realtime is not reachable.');
-  }
-  } catch (error) {
-    // Locally this means the Inngest dev server is not running (npm run dev:inngest).
-    console.warn(`Realtime is off, the inbox will poll instead: ${(error as Error).message}`);
+    if (!warnedOff) console.warn(`Realtime is off, the inbox will poll instead: ${(error as Error).message}`);
+    warnedOff = true;
     throw new AppError(503, 'REALTIME_OFF', 'Realtime is not reachable.');
   }
 }

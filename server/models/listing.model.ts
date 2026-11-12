@@ -63,6 +63,7 @@ const listingSchema = new Schema({
     // PKR per night; absent means no extra beds.
     extraBedPrice: { type: Number, min: 0 },
     petsAllowed: Boolean,
+    petsOnRequest: Boolean,
     smokingAllowed: Boolean,
     paymentMethods: { type: [{ type: String, enum: ['cash', 'card', 'jazzcash', 'easypaisa', 'bank_transfer'] }], default: undefined },
     powerBackup: { type: [{ type: String, enum: ['generator', 'solar', 'ups'] }], default: undefined },
@@ -71,11 +72,22 @@ const listingSchema = new Schema({
     mobileNetworks: { type: [{ type: String, enum: ['scom', 'zong', 'jazz', 'telenor', 'ufone'] }], default: undefined },
     roadAccess: { type: String, enum: ['car', 'jeep', 'walk'] },
     roadNote: { type: String, trim: true, maxlength: 300 },
+    // Who the property takes. Absent: not stated.
+    guestPolicy: { type: String, enum: ['everyone', 'families_only', 'women_only'] },
+    // Couples are asked for proof of marriage (nikah nama) at check-in.
+    marriageProof: Boolean,
+    // Where to come and who to call. Private: guests see it only once their booking is confirmed.
+    arrivalNote: { type: String, trim: true, maxlength: 600 },
     // Months (1-12) the property normally receives guests.
     openMonths: { type: [Number], default: undefined },
   },
   // How much a Pay now guest gets back; see src/shared/utils/cancellation.ts. Absent means the default policy.
   cancellationPolicy: { type: String, enum: CANCELLATION_POLICY_KEYS },
+  // Rate plans (see bookings/room-price.ts): percents off for one guest per room and for a non-refundable booking.
+  ratePlans: {
+    singleGuestPercent: { type: Number, min: 1, max: 50 },
+    nonRefundablePercent: { type: Number, min: 1, max: 50 },
+  },
   // Pay on arrival bookings are confirmed without the partner answering each one.
   instantBook: { type: Boolean, default: false },
   // Charges on top of the price, shown separately at checkout. `value` is a percent, or PKR per booking.
@@ -112,6 +124,11 @@ const listingSchema = new Schema({
     hotelType: String,
     checkInTime: String,
     checkOutTime: String,
+    checkInUntil: String,
+    checkOutFrom: String,
+    languages: { type: [String], default: undefined },
+    chainName: String,
+    invoiceName: String,
     // Hotels: breakfast served at the property (homestays use homestaySpecs.meals). Price in PKR per person.
     breakfast: { offered: Boolean, included: Boolean, price: Number, kinds: { type: [String], default: undefined } },
     // Hotels and homes. Price in PKR per day.
@@ -215,5 +232,6 @@ listingSchema.index({ title: 'text', location: 'text', description: 'text' });
 listingSchema.index({ type: 1, status: 1, featured: -1, createdAt: -1 });
 listingSchema.index({ coordinates: '2dsphere' }, { sparse: true });
 
-export const ListingModel: Model<any> = (mongoose.models.Listing as Model<any> | undefined)
-  ?? mongoose.model<any>('Listing', listingSchema);
+export type ListingRecord = mongoose.InferSchemaType<typeof listingSchema>;
+export const ListingModel: Model<ListingRecord> = (mongoose.models.Listing as Model<ListingRecord> | undefined)
+  ?? mongoose.model<ListingRecord>('Listing', listingSchema);

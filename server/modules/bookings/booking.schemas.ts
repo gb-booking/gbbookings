@@ -62,6 +62,8 @@ export const createBookingSchema = z.object({
   couponCode: couponCodeSchema.optional(),
   rental: rentalInputSchema.optional(),
   expectedTotalMinor: z.number().int().nonnegative().optional(),
+  // Hotels and homestays with a non-refundable rate plan; it needs Pay now.
+  ratePlan: z.enum(['standard', 'non_refundable']).default('standard'),
 }).strict().refine((input) => !input.childAges || input.childAges.length === input.children, { message: 'Give an age for each child.', path: ['childAges'] });
 
 /** What a guest can correct on an upcoming booking without asking the partner. */

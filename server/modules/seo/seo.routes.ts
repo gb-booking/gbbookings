@@ -7,6 +7,9 @@ import { ListingModel } from '../../models/listing.model.js';
 import { asyncHandler } from '../../shared/async-handler.js';
 import { escapeHtml } from '../email/auth-email.templates.js';
 import { visibleFilter } from '../listings/listing.service.js';
+import { escapeRegex } from '../../shared/escape-regex.js';
+import { STAY_TYPE_PAGES, stayTypePage } from '../../../src/shared/utils/rooms.js';
+import { TOWNS, townPlace } from '../../../src/shared/utils/places.js';
 
 /**
  * Crawlers get real HTML: each public page is the built index.html with its title, description and content filled in.
@@ -18,7 +21,13 @@ const CATEGORIES: Record<string, { type: string; title: string; description: str
   cars: { type: 'car', title: 'Car and jeep rental in Gilgit-Baltistan', description: 'Rent cars and 4x4 jeeps in Gilgit-Baltistan, with a driver or self-drive, from verified local partners.', unit: 'day' },
   tours: { type: 'tour', title: 'Tours in Gilgit-Baltistan', description: 'Guided tours and treks across Gilgit-Baltistan from verified tour companies and local guides.', unit: 'person' },
 };
-const STATIC_PATHS = ['/', '/destinations', '/support', '/terms', '/privacy', '/refunds', '/service', '/become-partner'];
+const STATIC_PATHS = ['/', '/destinations', '/support', '/terms', '/privacy', '/refunds', '/service', '/become-partner', '/about'];
+const townFilter = async (town: string) => ({ ...await visibleFilter(), location: new RegExp(escapeRegex(townPlace(town)), 'i') });
+async function townsWithListings() {
+  if (!await connectDatabase()) return [];
+  const counts = await Promise.all(TOWNS.map(async (town) => ListingModel.countDocuments(await townFilter(town))));
+  return TOWNS.filter((_, index) => counts[index] > 0);
+}
 const SCHEMA_TYPE: Record<string, string> = { hotel: 'Hotel', homestay: 'LodgingBusiness', car: 'Product', tour: 'TouristTrip' };
 
 const siteUrl = (request: Request) => (env.APP_URL ?? `${request.protocol}://${request.get('host')}`).replace(/\/$/, '');
@@ -55,7 +64,8 @@ export function renderPage(html: string, page: Page) {
     .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`)
     .replace(/<meta name="description"[^>]*>/, () => `<meta name="description" content="${description}" />`)
     .replace('</head>', () => `  ${head}\n  </head>`)
-    .replace(/<div id="root">[\s\S]*?<\/div>\s*(?=<script)/, () => `<div id="root"><main style="max-width:720px;margin:0 auto;padding:32px 16px;font-family:system-ui,sans-serif">${page.body}</main></div>\n    `);
+    // The built index.html has its script in <head>, so the root div is followed by </body> there.
+    .replace(/<div id="root">[\s\S]*?<\/div>\s*(?=<script|<\/body>)/, () => `<div id="root"><main style="max-width:720px;margin:0 auto;padding:32px 16px;font-family:system-ui,sans-serif">${page.body}</main></div>\n    `);
 }
 
 export const seoRouter = Router();
@@ -70,7 +80,11 @@ seoRouter.get('/sitemap.xml', asyncHandler(async (request, response) => {
     ? await ListingModel.find({ ...await visibleFilter(), type: { $in: ['hotel', 'homestay', 'car', 'tour'] } }).select('publicId updatedAt').limit(45_000).lean() as any[]
     : [];
   const urls = [
-    ...[...STATIC_PATHS, ...Object.keys(CATEGORIES).map((name) => `/${name}`)].map((pathName) => `<url><loc>${base}${pathName}</loc></url>`),
+    ...[
+      ...STATIC_PATHS, ...Object.keys(CATEGORIES).map((name) => `/${name}`),
+      ...STAY_TYPE_PAGES.map((page) => `/stays/${page.slug}`),
+      ...(await townsWithListings()).map((town) => `/place/${encodeURIComponent(town)}`),
+    ].map((pathName) => `<url><loc>${base}${pathName}</loc></url>`),
     ...listings.map((listing) => `<url><loc>${base}${escapeHtml(listingPath(listing))}</loc><lastmod>${new Date(listing.updatedAt).toISOString().slice(0, 10)}</lastmod></url>`),
   ];
   response.set('Cache-Control', 'public, max-age=3600').type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`);
@@ -109,5 +123,41 @@ seoRouter.get(Object.keys(CATEGORIES).map((name) => `/${name}`), asyncHandler(as
   response.set('Cache-Control', 'public, max-age=300').type('html').send(renderPage(await indexHtml(), {
     title: category.title, description: category.description, canonical: `${siteUrl(request)}/${name}`,
     body: `<h1>${escapeHtml(category.title)}</h1><p>${escapeHtml(category.description)}</p><ul>${items}</ul>`,
+  }));
+}));
+
+const UNIT: Record<string, string> = { hotel: 'night', homestay: 'night', car: 'day', tour: 'person' };
+const listingItems = (listings: any[]) => listings.map((listing) => `<li><a href="${escapeHtml(listingPath(listing))}">${escapeHtml(listing.title)}</a>, ${escapeHtml(listing.location)}, from PKR ${Number(listing.price).toLocaleString('en-PK')} per ${UNIT[listing.type] ?? 'night'}</li>`).join('');
+
+/** Town pages: what can be booked in that town. Any name renders (the app does too); only TOWNS are in the sitemap. */
+seoRouter.get('/place/:town', asyncHandler(async (request, response) => {
+  const town = request.params.town.trim().slice(0, 80);
+  const canonical = `${siteUrl(request)}/place/${encodeURIComponent(town)}`;
+  const listings = await connectDatabase()
+    ? await ListingModel.find({ ...await townFilter(town), type: { $in: ['hotel', 'homestay', 'car', 'tour'] } }).sort({ featured: -1, rating: -1 }).limit(100).select('publicId title location price type').lean() as any[]
+    : [];
+  const description = `Hotels, homestays, tours and car rental in ${town}, Gilgit-Baltistan, from verified local partners with prices in PKR.`;
+  response.status(listings.length ? 200 : 404).set('Cache-Control', 'public, max-age=300').type('html').send(renderPage(await indexHtml(), {
+    title: `Stays, tours and cars in ${town}`, description, canonical, noindex: !listings.length,
+    body: `<h1>${escapeHtml(town)}</h1><p>${escapeHtml(description)}</p><ul>${listingItems(listings)}</ul>`,
+  }));
+}));
+
+/** Property-type pages, such as /stays/resort. */
+seoRouter.get('/stays/:slug', asyncHandler(async (request, response) => {
+  const page = stayTypePage(request.params.slug);
+  const canonical = `${siteUrl(request)}/stays/${encodeURIComponent(request.params.slug)}`;
+  if (!page) {
+    response.status(404).type('html').send(renderPage(await indexHtml(), { title: 'Page not found', description: 'This page does not exist.', canonical, body: '<h1>Page not found</h1>', noindex: true }));
+    return;
+  }
+  const listings = await connectDatabase()
+    // The same rule as the app's category filter (listing.service): the type's name in the property type, or no type set.
+    ? await ListingModel.find({ ...await visibleFilter(page.type), $or: [{ 'hotelSpecs.hotelType': new RegExp(escapeRegex(page.name), 'i') }, { 'hotelSpecs.hotelType': { $in: [null, ''] } }] }).sort({ featured: -1, rating: -1 }).limit(100).select('publicId title location price type').lean() as any[]
+    : [];
+  const description = `${page.title} in Gilgit-Baltistan on GBBookings: verified local partners, live availability and prices in PKR.`;
+  response.set('Cache-Control', 'public, max-age=300').type('html').send(renderPage(await indexHtml(), {
+    title: `${page.title} in Gilgit-Baltistan`, description, canonical,
+    body: `<h1>${escapeHtml(page.title)} in Gilgit-Baltistan</h1><p>${escapeHtml(description)}</p><ul>${listingItems(listings)}</ul>`,
   }));
 }));

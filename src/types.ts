@@ -9,6 +9,8 @@ export interface StayInfo {
   /** PKR per night; absent means no extra beds. */
   extraBedPrice?: number;
   petsAllowed: boolean;
+  /** Pets only when the guest asks first. */
+  petsOnRequest?: boolean;
   smokingAllowed: boolean;
   paymentMethods: Array<'cash' | 'card' | 'jazzcash' | 'easypaisa' | 'bank_transfer'>;
   powerBackup: Array<'generator' | 'solar' | 'ups'>;
@@ -17,6 +19,12 @@ export interface StayInfo {
   mobileNetworks: Array<'scom' | 'zong' | 'jazz' | 'telenor' | 'ufone'>;
   roadAccess: 'car' | 'jeep' | 'walk';
   roadNote?: string;
+  /** Who the property takes; absent means not stated. */
+  guestPolicy?: 'everyone' | 'families_only' | 'women_only';
+  /** Couples are asked for proof of marriage at check-in. */
+  marriageProof?: boolean;
+  /** Partner views only: guests get it on a confirmed booking instead. */
+  arrivalNote?: string;
   /** 1–12; all twelve means open all year. */
   openMonths: number[];
 }
@@ -29,6 +37,9 @@ export interface Listing {
   title: string;
   location: string;
   price: number;
+  /** Search with stay dates: the cheapest room that takes the whole party, for all nights, with fees and taxes. */
+  stayTotal?: number;
+  stayNights?: number;
   rating: number;
   reviewsCount: number;
   /** Category averages of published reviews (1–5); present once the listing has reviews. */
@@ -204,6 +215,8 @@ export interface Booking {
   balanceCollectedAt?: string;
   /** Absent on older bookings, which keep the refund tiers they were sold under. */
   cancellationPolicy?: string;
+  /** Present when booked at the non-refundable rate. */
+  ratePlan?: 'standard' | 'non_refundable';
   lastChange?: { at: string; askedByGuest: boolean; reason?: string; from: { checkIn: string; checkOut: string; roomName?: string; rooms: number; total: number } };
   changeRequest?: { checkIn: string; checkOut: string; roomTypeId: string; roomName?: string; rooms: number; note?: string; status: 'pending' | 'declined'; declineReason?: string; requestedAt: string; proposedBy?: 'partner'; reason?: string; newTotalMinor?: number };
   createdAt: string;
@@ -238,6 +251,8 @@ export interface Booking {
   checkOutTime?: string;
   /** Only once the property has confirmed the stay. */
   propertyPhone?: string;
+  /** Where to come and who to call; only once the stay is confirmed. */
+  arrivalNote?: string;
   /** My Bookings only: the guest's review, or the last day they can still write one. */
   review?: Review;
   reviewableUntil?: string;

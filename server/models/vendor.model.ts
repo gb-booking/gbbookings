@@ -88,5 +88,6 @@ const vendorSchema = new Schema({
 vendorSchema.index({ ownerId: 1, status: 1 });
 vendorSchema.index({ name: 'text', slug: 'text' });
 
-export const VendorModel: Model<any> = (mongoose.models.Vendor as Model<any> | undefined)
-  ?? mongoose.model<any>('Vendor', vendorSchema);
+export type VendorRecord = mongoose.InferSchemaType<typeof vendorSchema>;
+export const VendorModel: Model<VendorRecord> = (mongoose.models.Vendor as Model<VendorRecord> | undefined)
+  ?? mongoose.model<VendorRecord>('Vendor', vendorSchema);

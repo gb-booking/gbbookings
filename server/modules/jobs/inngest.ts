@@ -17,9 +17,10 @@ export const userChannel = realtime.channel({
 });
 
 export async function inngestFunctions() {
-  const { runDailyJobs, runFrequentJobs } = await import('./scheduled.js');
+  const { runDailyJobs, frequentJobs, runScheduledJob } = await import('./scheduled.js');
   return [
-    inngest.createFunction({ id: 'frequent-jobs', triggers: [cron('*/5 * * * *')] }, async ({ step }) => step.run('run', runFrequentJobs)),
+    inngest.createFunction({ id: 'frequent-jobs', triggers: [cron('*/5 * * * *')] }, async ({ step }) =>
+      Promise.all(frequentJobs.map((job) => step.run(job.id, () => runScheduledJob(job.run))))),
     inngest.createFunction({ id: 'daily-trip-emails', triggers: [cron('TZ=Asia/Karachi 0 10 * * *')] }, async ({ step }) => step.run('run', runDailyJobs)),
   ];
 }

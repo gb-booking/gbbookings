@@ -1,5 +1,5 @@
 import { DEFAULT_CANCELLATION_POLICY } from '../../../src/shared/utils/cancellation.js';
-import { isValidObjectId } from 'mongoose';
+import { isValidObjectId, type Types } from 'mongoose';
 import type { Listing } from '../../../src/types.js';
 import { connectDatabase } from '../../database/connection.js';
 import { HotelRoomTypeModel } from '../../models/hotel-room-type.model.js';
@@ -9,6 +9,10 @@ import { escapeRegex } from '../../shared/escape-regex.js';
 import { availableRoomCounts } from '../bookings/availability.service.js';
 import { stayNights, todayInPakistan } from '../bookings/stay-dates.js';
 import { storedEnd } from '../bookings/rental.js';
+import { ratePlanMinor, staySubtotalMinor } from '../bookings/room-price.js';
+import { applyCharges, chargeRulesFor } from '../bookings/charges.js';
+import { getPlatformSettings } from '../settings/settings.service.js';
+import { stayRuleProblem } from '../../../src/shared/utils/roomPricing.js';
 import { NotFoundError, ServiceUnavailableError } from '../../shared/app-error.js';
 import type { ListListingsQuery } from './listing.schemas.js';
 
@@ -33,7 +37,8 @@ function toPublicListing(record: ListingRecord): Listing {
     description: record.description,
     featured: record.featured,
     ...(latLng(record.coordinates) ? { coordinates: latLng(record.coordinates) } : {}),
-    ...(record.stayInfo?.paymentMethods?.length ? { stayInfo: record.stayInfo } : {}),
+    // Arrival instructions are private: guests get them on a confirmed booking.
+    ...(record.stayInfo?.paymentMethods?.length ? { stayInfo: { ...record.stayInfo, arrivalNote: undefined } } : {}),
     cancellationPolicy: record.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY,
     ...(record.fees?.length ? { fees: record.fees } : {}),
     breakfastIncluded: (record.homestaySpecs?.meals ?? []).some((meal: any) => meal.type === 'breakfast' && meal.included)
@@ -112,6 +117,7 @@ export async function listPublishedListings(query: ListListingsQuery) {
   }
   // Partly or fully refundable until close to the start. Listings with no policy use the default, which is moderate.
   if (query.freeCancellation) (filter.$and as unknown[]).push({ $or: [{ cancellationPolicy: { $in: ['flexible', 'moderate'] } }, { cancellationPolicy: null }] });
+  if (query.guestPolicy) filter['stayInfo.guestPolicy'] = query.guestPolicy;
   if (query.minStars) filter['hotelSpecs.stars'] = { $gte: query.minStars };
   if (query.breakfast) {
     (filter.$and as unknown[]).push({ $or: [
@@ -129,14 +135,16 @@ export async function listPublishedListings(query: ListListingsQuery) {
         .map((field) => ({ [field]: pattern })),
     })));
   }
+  // Rooms are read only for listings that already pass every other filter, not for the whole site.
+  const matching = () => ListingModel.find(filter).distinct('_id') as unknown as Promise<Types.ObjectId[]>;
   if (query.type === 'tour' && query.checkIn) {
     // Tours: free seats for the whole party on the start date, and a departure that day for fixed-date tours.
-    filter._id = { $in: await listingsWithAvailability(query.checkIn, storedEnd('tour', query.checkIn), 1, query.guests ?? 1) };
     (filter.$and as unknown[]).push({ $or: [{ 'tourSpecs.schedule': { $ne: 'fixed' } }, { departures: query.checkIn }] });
+    filter._id = { $in: await listingsWithAvailability(await matching(), query.checkIn, storedEnd('tour', query.checkIn), 1, query.guests ?? 1) };
   } else if (query.checkIn && query.checkOut) {
-    filter._id = { $in: await listingsWithAvailability(query.checkIn, storedEnd(query.type ?? '', query.checkOut), query.guests ?? 1, query.rooms) };
+    filter._id = { $in: await listingsWithAvailability(await matching(), query.checkIn, storedEnd(query.type ?? '', query.checkOut), query.guests ?? 1, query.rooms) };
   } else if (query.guests) {
-    filter._id = { $in: await listingsThatFit(query.guests) };
+    filter._id = { $in: await listingsThatFit(await matching(), query.guests) };
   }
 
   const skip = (query.page - 1) * query.limit;
@@ -149,8 +157,14 @@ export async function listPublishedListings(query: ListListingsQuery) {
     ListingModel.countDocuments(filter),
   ]);
 
+  const stays = (query.type === 'hotel' || query.type === 'homestay') && query.checkIn && query.checkOut;
+  const totals = stays ? await stayTotals(records, query.checkIn!, query.checkOut!, query.guests ?? 1) : undefined;
+
   return {
-    data: records.map((record) => toPublicListing(record)),
+    data: records.map((record) => {
+      const total = totals?.get(String(record._id));
+      return total === undefined ? toPublicListing(record) : { ...toPublicListing(record), stayTotal: total, stayNights: totals!.nights };
+    }),
     meta: {
       page: query.page,
       limit: query.limit,
@@ -182,10 +196,6 @@ export async function placeCounts(type: string, places: string[]) {
   return Object.fromEntries(places.map((place, index) => [place, counts[index]]));
 }
 
-/**
- * Listing _ids with at least one active room type that fits the party and is free every night.
- * ponytail: scans all active room types per dated search; add a per-date availability index once the catalog is large.
- */
 /** Listings whose rooms, all together, sleep this many: a hotel with 14 double rooms can host a party of 9. */
 function listingsWithCapacity(rooms: Array<{ listingId: unknown; maxAdults: number }>, free: (room: any) => number, guests: number) {
   const capacity = new Map<string, { id: unknown; beds: number }>();
@@ -197,14 +207,16 @@ function listingsWithCapacity(rooms: Array<{ listingId: unknown; maxAdults: numb
   return [...capacity.values()].filter((entry) => entry.beds >= guests).map((entry) => entry.id);
 }
 
-async function listingsThatFit(guests: number) {
-  const rooms = await HotelRoomTypeModel.find({ status: 'active', deletedAt: null }).select('listingId totalRooms maxAdults').lean() as any[];
+async function listingsThatFit(listingIds: Types.ObjectId[], guests: number) {
+  const rooms = await HotelRoomTypeModel.find({ listingId: { $in: listingIds }, status: 'active', deletedAt: null }).select('listingId totalRooms maxAdults').lean() as any[];
   return listingsWithCapacity(rooms, (room) => room.totalRooms, guests);
 }
 
-async function listingsWithAvailability(checkIn: string, checkOut: string, guests: number, rooms?: number) {
+/** Among `listingIds`, those with active room types that fit the party and are free every night. */
+async function listingsWithAvailability(listingIds: Types.ObjectId[], checkIn: string, checkOut: string, guests: number, rooms?: number) {
   const nights = stayNights(checkIn, checkOut);
   const roomTypes = await HotelRoomTypeModel.find({
+    listingId: { $in: listingIds },
     status: 'active',
     deletedAt: null,
     ...(rooms ? { totalRooms: { $gte: rooms }, maxAdults: { $gte: Math.ceil(guests / rooms) } } : {}),
@@ -213,6 +225,32 @@ async function listingsWithAvailability(checkIn: string, checkOut: string, guest
   const free = (room: any) => available.get(String(room._id)) ?? 0;
   if (rooms) return roomTypes.filter((room) => free(room) >= rooms).map((room) => room.listingId);
   return listingsWithCapacity(roomTypes, free, guests);
+}
+
+/**
+ * Per listing on this page, the cheapest single room that takes the whole party, is free every night and meets the
+ * room's stay rules, priced as the room panel quotes it: deals, partner fees and taxes, but no meals or coupons.
+ * Listings that need several rooms for the party get no total and keep their per-night price.
+ */
+async function stayTotals(records: any[], checkIn: string, checkOut: string, guests: number) {
+  const nights = stayNights(checkIn, checkOut);
+  const today = todayInPakistan();
+  const [roomTypes, settings] = await Promise.all([
+    HotelRoomTypeModel.find({ listingId: { $in: records.map((record) => record._id) }, status: 'active', deletedAt: null, maxAdults: { $gte: guests } }).lean() as Promise<any[]>,
+    getPlatformSettings(),
+  ]);
+  const available = await availableRoomCounts(roomTypes, nights);
+  const byId = new Map(records.map((record) => [String(record._id), record]));
+  const totals = Object.assign(new Map<string, number>(), { nights: nights.length });
+  for (const room of roomTypes) {
+    if ((available.get(String(room._id)) ?? 0) < 1 || stayRuleProblem(room, nights.length, checkIn)) continue;
+    const listing = byId.get(String(room.listingId));
+    const roomMinor = ratePlanMinor(staySubtotalMinor(room, nights, 1, today), listing.ratePlans, { adults: guests, children: 0, rooms: 1 });
+    const totalMinor = applyCharges(roomMinor, chargeRulesFor(listing, settings.taxes)).totalMinor;
+    const key = String(room.listingId);
+    if (!totals.has(key) || totalMinor / 100 < totals.get(key)!) totals.set(key, totalMinor / 100);
+  }
+  return totals;
 }
 
 /** Published listings among the given public IDs, in the given order; unpublished or deleted ones drop out. */

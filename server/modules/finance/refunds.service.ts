@@ -61,7 +61,7 @@ export async function sendPendingRefunds() {
 
 /** Refunds still owed, oldest first, plus the last sent ones so the admin can look one up. */
 export async function listRefunds(filter: 'open' | 'sent') {
-  const statuses = filter === 'open' ? ['pending', 'sending', 'failed'] : ['sent'];
+  const statuses: Array<'pending' | 'sending' | 'failed' | 'sent'> = filter === 'open' ? ['pending', 'sending', 'failed'] : ['sent'];
   const bookings = await BookingModel.find({ 'refunds.status': { $in: statuses } }).select('publicId reference guest listingSnapshot.title refunds paymentMethod').sort({ updatedAt: filter === 'open' ? 1 : -1 }).limit(200).lean() as any[];
   return bookings.flatMap((booking) => (booking.refunds ?? []).filter((refund: any) => statuses.includes(refund.status)).map((refund: any) => ({
     id: String(refund._id), bookingId: booking.publicId, reference: booking.reference, guestName: booking.guest.name, guestEmail: booking.guest.email,

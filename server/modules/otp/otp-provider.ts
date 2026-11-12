@@ -7,7 +7,7 @@ export interface OtpDelivery {
   destination: string;
   recipientName?: string;
   code: string;
-  purpose: 'signup' | 'two_factor_login' | 'two_factor_setup' | 'email_verification' | 'phone_verification' | 'account_deletion' | 'password_change' | 'email_change_current' | 'email_change_new';
+  purpose: 'signup' | 'two_factor_login' | 'two_factor_setup' | 'email_verification' | 'phone_verification' | 'account_deletion' | 'password_change' | 'email_change_current' | 'email_change_new' | 'partner_verification';
   expiresInMinutes: number;
 }
 
@@ -41,6 +41,8 @@ export class ResendEmailOtpProvider implements OtpProvider {
               ? 'Someone is changing the email on your GBBookings account. Use this code to allow it. If it was not you, change your password now.'
             : delivery.purpose === 'email_change_new'
               ? 'Use this code to confirm this address for your GBBookings account.'
+            : delivery.purpose === 'partner_verification'
+              ? 'Use this code to confirm your email and start listing your property on GBBookings. If you did not ask for this, you can ignore this email.'
             : delivery.purpose === 'password_change'
               ? 'Use this one-time code to <strong>change your GBBookings password</strong>. If you did not ask for this, someone may be signed in to your account: end your other sessions under Login &amp; security.'
               : 'Use this one-time code to continue:'}</p>

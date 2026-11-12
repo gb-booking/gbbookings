@@ -20,6 +20,8 @@ export interface CheckoutParams {
   extrasTotal?: number;
   /** Tours: startDate is the first day, endDate the last; rooms are seats (one per traveller). */
   tour?: { days: number; meetingPoint?: string; startTime?: string };
+  /** Hotels and homestays: the non-refundable rate is paid now and cannot be refunded. */
+  ratePlan?: 'standard' | 'non_refundable';
 }
 interface CheckoutFlowProps {
   bookingParams: CheckoutParams; listing: Listing; userEmail?: string; userName?: string;
@@ -65,6 +67,7 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
   const [payNow, setPayNow] = useState(false);
   const car = Boolean(params.rental);
   const tour = params.tour;
+  const nonRefundable = params.ratePlan === 'non_refundable';
   const selfDrive = car && !params.rental!.driver;
   // Tours hold seats on the start date; the server works out the end from the tour's length.
   const apiCheckOut = tour ? params.startDate : params.endDate;
@@ -81,8 +84,11 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
     });
     const room = result.rooms.find((item) => item.id === params.roomTypeId);
     if (!room?.bookable) throw new Error('This room is no longer available. Return to the property to choose another room or dates.');
-    setQuote(room.totalPrice); setMealCost(result.mealsTotal); setExtras(room.extrasTotal ?? 0); setCharges(room.charges ?? []); setPolicy(result.cancellationPolicy);
-    setInstant(Boolean(result.instantBook)); setOnlineAvailable(Boolean(result.onlinePayment)); if (!result.onlinePayment) setPayNow(false);
+    // The non-refundable rate: its own price and charges, always paid now, never refunded.
+    if (nonRefundable && !room.nonRefundable) throw new Error('The non-refundable rate is no longer available. Return to the property to choose the standard rate.');
+    const priced = nonRefundable && room.nonRefundable ? room.nonRefundable : room;
+    setQuote(priced.totalPrice); setMealCost(result.mealsTotal); setExtras(room.extrasTotal ?? 0); setCharges(priced.charges ?? []); setPolicy(nonRefundable ? 'non_refundable' : result.cancellationPolicy);
+    setInstant(Boolean(result.instantBook)); setOnlineAvailable(Boolean(result.onlinePayment)); setPayNow(nonRefundable ? true : (current) => result.onlinePayment ? current : false);
     setCoupon(result.coupon ? { ...result.coupon, discount: room.discount ?? 0 } : null);
   };
   const review = async (event: FormEvent) => {
@@ -120,6 +126,7 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
         specialRequests: specialRequests.trim() || undefined, arrivalTime: arrivalTime || undefined, childAges: childAges.length ? childAges.map(Number) : undefined, meals: params.meals?.length ? params.meals : undefined, couponCode: coupon?.code,
         ...(params.rental ? { rental: { ...params.rental, ...(selfDrive ? { licenceNumber: licenceNumber.trim(), driverAge: Number(driverAge) } : {}) } } : {}),
         expectedTotalMinor: Math.round(quote * 100), paymentMethod: payNow ? 'online' : 'pay_at_hotel',
+        ...(nonRefundable ? { ratePlan: 'non_refundable' as const } : {}),
       }, checkoutKey.current);
       if (payNow) {
         setBooking(created);
@@ -209,7 +216,8 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
                 </form>}
             {onlineAvailable && <fieldset className="space-y-2">
               <legend className="text-sm font-semibold text-slate-800">How would you like to pay?</legend>
-              {([[true, 'Pay now', 'Card or mobile wallet on Safepay’s secure page. Confirmed instantly.'], [false, 'Pay on arrival', `Pay ${payWhere}. ${instant ? 'Confirmed right away.' : 'The partner confirms your request within a day.'}`]] as const).map(([value, title, hint]) => (
+              {nonRefundable && <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-900">You chose the non-refundable rate: it is paid now and can't be refunded.</p>}
+              {([[true, 'Pay now', 'Card or mobile wallet on Safepay’s secure page. Confirmed instantly.'], ...(nonRefundable ? [] : [[false, 'Pay on arrival', `Pay ${payWhere}. ${instant ? 'Confirmed right away.' : 'The partner confirms your request within a day.'}`]] as const)] as const).map(([value, title, hint]) => (
                 <label key={title} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${payNow === value ? 'border-[#006F3C] bg-emerald-50/50' : 'border-slate-200'}`}>
                   <input type="radio" name="payment" checked={payNow === value} onChange={() => setPayNow(value)} className="mt-1 accent-[#006F3C]" />
                   <span><span className="block font-semibold text-slate-900">{title}</span><span className="block text-sm text-slate-500">{hint}</span></span>
@@ -343,6 +351,7 @@ function Receipt({ booking, onDone }: { booking: Booking; onDone: () => void }) 
             <a href={`tel:${booking.propertyPhone.replace(/\s/g, '')}`} className="text-[#006F3C] underline">{booking.propertyPhone}</a>
             {whatsappNumber(booking.propertyPhone) && <a href={`https://wa.me/${whatsappNumber(booking.propertyPhone)}?text=${encodeURIComponent(`Hello, I have booking ${reference} at ${booking.listingTitle}.`)}`} target="_blank" rel="noopener noreferrer" className="ml-3 inline-flex min-h-9 items-center rounded-md bg-emerald-50 px-2 text-xs font-semibold text-emerald-800 print:hidden">WhatsApp</a>}
           </dd></>}
+          {booking.arrivalNote && <><dt className="text-slate-500">Getting there</dt><dd className="whitespace-pre-line font-medium text-slate-900">{booking.arrivalNote}</dd></>}
           {booking.childAges?.length ? <><dt className="text-slate-500">Children’s ages</dt><dd className="font-medium text-slate-900">{booking.childAges.join(', ')}</dd></> : null}
           {booking.arrivalTime && <><dt className="text-slate-500">Arrival time</dt><dd className="font-medium text-slate-900">{booking.arrivalTime}</dd></>}
           {booking.specialRequests && <><dt className="text-slate-500">Requests</dt><dd className="italic text-slate-700">“{booking.specialRequests}”</dd></>}

@@ -11,7 +11,7 @@ import TourBookingPanel from '../booking/TourBookingPanel';
 import { DRIVER_LABELS } from '../vendor/CarFields';
 import { extrasLines } from '../vendor/PropertyExtrasFields';
 import { MapEmbed } from '../../shared/components/MapPin';
-import { HEATING_LABELS, HOT_WATER_LABELS, NETWORK_LABELS, openSeason, PAYMENT_LABELS, POWER_LABELS, ROAD_LABELS } from '../../shared/utils/stayInfo';
+import { GUEST_POLICY_LABELS, HEATING_LABELS, HOT_WATER_LABELS, NETWORK_LABELS, openSeason, PAYMENT_LABELS, POWER_LABELS, ROAD_LABELS } from '../../shared/utils/stayInfo';
 import type { CheckoutParams } from '../booking/CheckoutFlow';
 import { ArrowLeft, ArrowRight, Star, MapPin, Heart, Share2, Check, Clock, Info, Utensils, Languages, Home, Zap, Flame, Droplets, Signal, Car, CalendarRange, MessageSquare } from 'lucide-react';
 
@@ -128,6 +128,8 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
   // Cars only carry payment methods in stayInfo; the stay policies and essentials are for hotels and homestays.
   const stayPolicies = info && listing.type !== 'car' && listing.type !== 'tour' ? info : undefined;
   const policyRules = stayPolicies ? [
+    ...(stayPolicies.guestPolicy ? [GUEST_POLICY_LABELS[stayPolicies.guestPolicy]] : []),
+    ...(stayPolicies.marriageProof ? ['Couples are asked for proof of marriage (nikah nama) at check-in'] : []),
     stayPolicies.childrenAllowed ? 'Children welcome' : 'Children not allowed',
     ...(stayPolicies.minCheckInAge ? [`Minimum check-in age: ${stayPolicies.minCheckInAge}`] : []),
     stayPolicies.extraBedPrice !== undefined ? `Extra bed: PKR ${stayPolicies.extraBedPrice.toLocaleString()} per night` : 'No extra beds',

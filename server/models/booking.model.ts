@@ -32,6 +32,8 @@ const bookingSchema = new Schema({
     checkInTime: String, checkOutTime: String,
     // Business phone at booking time; shown to the guest once the stay is confirmed.
     phone: String,
+    // Where to come and who to call, at booking time; shown to the guest once the stay is confirmed.
+    arrivalNote: String,
   },
   roomSnapshot: { publicId: String, name: String, bedType: String },
   checkIn: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
@@ -100,6 +102,8 @@ const bookingSchema = new Schema({
   },
   // The policy at booking time. Absent on older bookings, which keep the refund tiers they were sold under.
   cancellationPolicy: { type: String, enum: CANCELLATION_POLICY_KEYS },
+  // Rate plan chosen at booking. A non-refundable booking also keeps the non_refundable policy above.
+  ratePlan: { type: String, enum: ['standard', 'non_refundable'], default: undefined },
   // A guest's request to move the booking; the partner accepts or declines.
   changeRequest: {
     type: new Schema({
@@ -201,5 +205,6 @@ bookingSchema.index(
   { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
 );
 
-export const BookingModel: Model<any> = (mongoose.models.Booking as Model<any> | undefined)
-  ?? mongoose.model<any>('Booking', bookingSchema);
+export type BookingRecord = mongoose.InferSchemaType<typeof bookingSchema>;
+export const BookingModel: Model<BookingRecord> = (mongoose.models.Booking as Model<BookingRecord> | undefined)
+  ?? mongoose.model<BookingRecord>('Booking', bookingSchema);

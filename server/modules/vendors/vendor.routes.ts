@@ -5,6 +5,9 @@ import { authenticate, authorizePermission } from '../../middleware/authenticate
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../shared/async-handler.js';
 import { sessionMetadata } from '../auth/auth.service.js';
+import { verifyOtpSchema } from '../auth/auth.schemas.js';
+import { authenticationLimiter } from '../auth/auth.routes.js';
+import { confirmPartnerVerification, partnerVerificationStatus, requestPartnerVerificationCode } from './vendor.service.js';
 import { accessFor } from './member-access.js';
 import {
   acceptPartnerAgreement,
@@ -42,6 +45,17 @@ export const adminVendorRouter = Router();
 
 // Applicants are customers until approval; the service only lets the application's owner change it while draft/rejected.
 vendorRouter.use(authenticate);
+
+// Partner sign-in: prove the account's email with a code before starting a partner application or first listing.
+vendorRouter.get('/partner-verification', asyncHandler(async (request, response) => {
+  response.json({ data: await partnerVerificationStatus(request.auth!.userId) });
+}));
+vendorRouter.post('/partner-verification/code', authenticationLimiter, asyncHandler(async (request, response) => {
+  response.json({ data: await requestPartnerVerificationCode(request.auth!.userId, sessionMetadata(request)) });
+}));
+vendorRouter.post('/partner-verification/confirm', authenticationLimiter, validate('body', verifyOtpSchema), asyncHandler(async (request, response) => {
+  response.json({ data: await confirmPartnerVerification(request.auth!.userId, request.body.challengeId, request.body.code, sessionMetadata(request)) });
+}));
 
 vendorRouter.post('/', validate('body', createVendorSchema), asyncHandler(async (request, response) => {
   const vendor = await createVendorApplication(request.auth!.userId, request.body, sessionMetadata(request));

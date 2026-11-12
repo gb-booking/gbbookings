@@ -1,7 +1,7 @@
 import { hideContacts } from '../messages/contact-filter.js';
 import { CANCELLATION_POLICY_KEYS } from '../../../src/shared/utils/cancellation.js';
 import { z } from 'zod';
-import { BATHROOM_ITEMS, BED_KINDS, BREAKFAST_KINDS, ROOM_TYPES, type BedKind, type RoomTypeKey } from '../../../src/shared/utils/rooms.js';
+import { BATHROOM_ITEMS, BED_KINDS, BREAKFAST_KINDS, ROOM_TYPES, ROOM_VIEWS, type BedKind, type RoomTypeKey } from '../../../src/shared/utils/rooms.js';
 
 // Guests and partners deal through GBBookings, so listings can't carry a way around it. The admin also reads them.
 const noContacts = (text: string) => !hideContacts(text).hidden;
@@ -102,6 +102,8 @@ export const stayInfoSchema = z.object({
   minCheckInAge: z.number().int().min(0).max(30).optional(),
   extraBedPrice: z.number().int().min(0).max(100_000).optional(),
   petsAllowed: z.boolean(),
+  // Pets only when the guest asks first ("on request"); goes with petsAllowed.
+  petsOnRequest: z.boolean().optional(),
   smokingAllowed: z.boolean(),
   paymentMethods: z.array(z.enum(['cash', 'card', 'jazzcash', 'easypaisa', 'bank_transfer'])).min(1, 'Choose at least one way guests can pay.').max(5),
   powerBackup: z.array(z.enum(['generator', 'solar', 'ups'])).max(3).default([]),
@@ -110,6 +112,9 @@ export const stayInfoSchema = z.object({
   mobileNetworks: z.array(z.enum(['scom', 'zong', 'jazz', 'telenor', 'ufone'])).max(5).default([]),
   roadAccess: z.enum(['car', 'jeep', 'walk']),
   roadNote: z.string().trim().max(300).optional(),
+  guestPolicy: z.enum(['everyone', 'families_only', 'women_only']).optional(),
+  marriageProof: z.boolean().optional(),
+  arrivalNote: z.string().trim().max(600).optional(),
   openMonths: z.array(z.number().int().min(1).max(12)).min(1, 'Choose the months you receive guests.').max(12)
     .refine((months) => new Set(months).size === months.length, 'List each month once.'),
 }).strict();
@@ -129,6 +134,15 @@ const listingFields = z.object({
     policies: cleanList,
     checkInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     checkOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    // Time windows, as Booking.com asks: check-in until, check-out from. Older listings have one time each.
+    checkInUntil: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    checkOutFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    // Languages the staff speak (homestays keep theirs on homestaySpecs).
+    languages: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+    // Part of a group, chain or management company: its name.
+    chainName: z.string().trim().max(120).optional(),
+    // The name on the partner's invoices and statements for this property.
+    invoiceName: z.string().trim().max(160).optional(),
     breakfast: z.object({
       offered: z.boolean(),
       included: z.boolean().default(false),
@@ -160,6 +174,11 @@ const listingFields = z.object({
   stayInfo: z.union([stayInfoSchema, stayInfoSchema.pick({ paymentMethods: true }).strict()]).optional(),
   cancellationPolicy: z.enum(CANCELLATION_POLICY_KEYS).optional(),
   instantBook: z.boolean().optional(),
+  // Rate plans, hotels and homestays: percents off; null turns a plan off. They apply at once, like prices.
+  ratePlans: z.object({
+    singleGuestPercent: z.number().int().min(1).max(50).nullable().optional(),
+    nonRefundablePercent: z.number().int().min(1).max(50).nullable().optional(),
+  }).strict().optional(),
   // Service charge, cleaning fee and the like; taxes are set by the admin.
   fees: z.array(z.object({
     name: z.string().trim().min(2).max(60),
@@ -216,6 +235,8 @@ const roomLayout = {
   bathrooms: z.number().int().min(0).max(20).optional(),
   sizeSqm: z.number().int().min(1).max(5_000).optional(),
   cots: z.boolean().optional(),
+  smokingAllowed: z.boolean().optional(),
+  view: z.enum(ROOM_VIEWS).optional(),
 };
 
 export const roomTypeSchema = z.object({

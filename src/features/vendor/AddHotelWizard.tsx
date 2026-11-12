@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Check, Image as ImageIcon, LoaderCircle, Plus } from "lucide-react";
+import { Check, ChevronLeft, Image as ImageIcon, Lightbulb, LoaderCircle, Plus } from "lucide-react";
 import {
   api,
   EXPERIENCE_TYPES,
@@ -17,10 +17,12 @@ import HomestayHostFields, {
 import PhotoManager, { toPhotoInput, type EditablePhoto } from "./PhotoManager";
 import StayInfoFields, {
   defaultStayInfo,
+  PaymentMethodsField,
   stayInfoProblem,
 } from "./StayInfoFields";
 import { openSeason, PAYMENT_LABELS } from "../../shared/utils/stayInfo";
-import { addressLine, HOME_TYPES, HOTEL_TYPES, roomFacts, type PropertyAddress } from "../../shared/utils/rooms";
+import { CANCELLATION_POLICIES, policyLines, type CancellationPolicy } from "../../shared/utils/cancellation";
+import { addressLine, HOME_TYPES, HOTEL_TYPES, roomFacts, STAFF_LANGUAGES, type PropertyAddress } from "../../shared/utils/rooms";
 import {
   emptyRoom,
   entireHome,
@@ -38,34 +40,89 @@ const choiceClass = (selected: boolean) =>
   `flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${selected ? "border-[#006F3C] bg-emerald-50" : "border-slate-200 bg-white hover:border-slate-300"}`;
 
 type StepId =
-  | "type" | "stay" | "count" | "confirm" | "name"
-  | "address" | "pin"
-  | "facilities" | "extras" | "rules" | "policies" | "host"
-  | "rooms" | "photos"
+  | "type" | "stay" | "count" | "confirm" | "ota" | "name"
+  | "address" | "pin" | "calendar"
+  | "facilities" | "extras" | "languages" | "rules" | "policies" | "host"
+  | "rooms" | "rates" | "photos"
+  | "payments" | "invoicing" | "howwork"
   | "review" | "business";
 
-const SECTIONS = ["Property", "Location", "Details", "Rooms", "Photos", "Finish"] as const;
+/** The four parts of Booking.com's registration hub; each ends back on the hub. */
+const SECTIONS = ["Property details", "Units", "Photos", "Final steps"] as const;
 type Section = typeof SECTIONS[number];
 
-/** One small question per step. The section groups steps in the progress bar. */
+/** One small question per step. The section is the hub card it belongs to. */
 const STEP_TEXT: Record<StepId, { section: Section; title: string; intro: string }> = {
-  type: { section: "Property", title: "Which best describes your place?", intro: "Guests filter by this, so pick the closest match." },
-  stay: { section: "Property", title: "What can guests book?", intro: "This decides whether guests book the whole place or a room in it." },
-  count: { section: "Property", title: "How many are you listing?", intro: "Each property is listed on its own." },
-  confirm: { section: "Property", title: "Does this sound like your property?", intro: "" },
-  name: { section: "Property", title: "What is your property called?", intro: "The name and description appear on the property page and in search." },
-  address: { section: "Location", title: "Where is your property?", intro: "Write the address the way a driver would find it: area, village or road, and town." },
-  pin: { section: "Location", title: "Pin it on the map", intro: "A map pin lets guests get directions. You can skip this and add it later." },
-  facilities: { section: "Details", title: "What can guests use?", intro: "Tick everything guests can use at the property. Guests filter search results by these." },
-  extras: { section: "Details", title: "Breakfast and parking", intro: "Most guests in Gilgit-Baltistan arrive by car or jeep, so tell them where to park." },
-  rules: { section: "Details", title: "House rules and check-in", intro: "Check-in and check-out times are shown on every booking." },
-  policies: { section: "Details", title: "Policies and mountain essentials", intro: "Guests check these before they book: how to pay, children and pets, and power, heating, signal and the road in." },
-  host: { section: "Details", title: "Introduce the host and meals", intro: "Guests choose homestays for the people and the food." },
-  rooms: { section: "Rooms", title: "What do guests book?", intro: "Add one category per kind of room, such as Deluxe Double or Family Room. We never sell more rooms than you set." },
-  photos: { section: "Photos", title: "Show guests the place", intro: "Add up to 20 photos. The first is the cover in search results; captions help guests." },
-  review: { section: "Finish", title: "Check everything", intro: "GBBookings checks new properties before guests can book them, usually within a day. You get an email either way." },
-  business: { section: "Finish", title: "Your business details", intro: "Last step: who runs the property, and the documents GBBookings needs to verify you. Your listing is submitted with them." },
+  type: { section: "Property details", title: "Which best describes your place?", intro: "Guests filter by this, so pick the closest match." },
+  stay: { section: "Property details", title: "What can guests book?", intro: "This decides whether guests book the whole place or a room in it." },
+  count: { section: "Property details", title: "How many are you listing?", intro: "Each property is listed on its own." },
+  confirm: { section: "Property details", title: "Does this sound like your property?", intro: "" },
+  ota: { section: "Property details", title: "Where else is your property listed?", intro: "" },
+  name: { section: "Property details", title: "What is your property called?", intro: "The name and description appear on the property page and in search." },
+  address: { section: "Property details", title: "Where is your property?", intro: "Write the address the way a driver would find it: area, village or road, and town." },
+  pin: { section: "Property details", title: "Pin it on the map", intro: "Guests use the pin for directions and the map search. Tap the map where the entrance is." },
+  calendar: { section: "Property details", title: "Do you use another booking site's calendar?", intro: "If you also take bookings on Airbnb, Booking.com or a Google Calendar, we can keep the dates in step so you are never double-booked." },
+  facilities: { section: "Property details", title: "What can guests use?", intro: "Tick everything guests can use at the property. Guests filter search results by these." },
+  extras: { section: "Property details", title: "Breakfast and parking", intro: "Most guests in Gilgit-Baltistan arrive by car or jeep, so tell them where to park." },
+  languages: { section: "Property details", title: "What languages do you or your staff speak?", intro: "Guests who share a language book more easily." },
+  rules: { section: "Property details", title: "House rules", intro: "Check-in and check-out times are shown on every booking. You can add more rules later." },
+  policies: { section: "Property details", title: "Policies and mountain essentials", intro: "Guests check these before they book: how to pay, children and pets, and power, heating, signal and the road in." },
+  host: { section: "Property details", title: "Introduce the host and meals", intro: "Guests choose homestays for the people and the food." },
+  rooms: { section: "Units", title: "What do guests book?", intro: "Add one category per kind of room, such as Deluxe Double or Family Room. We never sell more rooms than you set." },
+  rates: { section: "Units", title: "Rate plans", intro: "To attract a wider range of guests, we suggest several rate plans. They are filled in with what works for properties like yours; change them now or later from your dashboard." },
+  photos: { section: "Photos", title: "What does your property look like?", intro: "Upload at least 5 photos. The first is the cover in search results; captions help guests. You can add more later." },
+  payments: { section: "Final steps", title: "Payments", intro: "How can your guests pay for their stay?" },
+  invoicing: { section: "Final steps", title: "Invoicing", intro: "GBBookings sends you statements for your bookings and commission. Choose the name they carry." },
+  howwork: { section: "Final steps", title: "How bookings work", intro: "Some important info before you list your property on GBBookings." },
+  review: { section: "Final steps", title: "Your registration", intro: "Finish each part. GBBookings checks new properties before guests can book them, usually within a day, and emails you either way." },
+  business: { section: "Final steps", title: "Your business details", intro: "Last step: who runs the property, and the documents GBBookings needs to verify you. Your listing is submitted with them." },
 };
+
+/** One line per property type, as on Booking.com's tiles. */
+const TYPE_TEXT: Record<string, string> = {
+  Hotel: "Rooms for travellers, often with a restaurant and other guest services.",
+  "Guest House": "A private home with separate living space for host and guests.",
+  "Bed and breakfast": "A private home offering overnight stays and breakfast.",
+  Hostel: "Budget stays with mostly dorm-style beds and a social feel.",
+  Lodge: "A small inn in the mountains or the countryside.",
+  Motel: "Roadside rooms with parking at the door.",
+  Resort: "A place to stay with leisure facilities on site.",
+  "Boutique Hotel": "A small, stylish hotel with its own character.",
+  Campsite: "Pitches or tents in the open, often with shared facilities.",
+  Glamping: "Comfortable tents, domes or cabins in nature.",
+  Homestay: "A family home where guests share living space with the host.",
+  Apartment: "A furnished, self-catering flat.",
+  "Holiday home": "A whole house for guests on holiday.",
+  Villa: "A large private house, often with a garden.",
+  "Cottage / Chalet": "A small wooden or stone house in the mountains.",
+  "Farm stay": "A working farm with simple rooms.",
+};
+const OTHER_SITES = ["Booking.com", "Airbnb", "Agoda", "Another website", "My property isn't listed on any other websites"];
+
+/** The tip card beside each step page, like Booking.com's "What if…" boxes. */
+const TIPS: Partial<Record<StepId, [string, string]>> = {
+  type: ["Not sure which to pick?", "Choose the type guests would call your place. Guests filter search by it, and you can change it later."],
+  count: ["Listing more than one?", "List the first now. Afterwards, Duplicate in your dashboard copies it, so the next only needs its own name, address, photos and rooms."],
+  ota: ["Why do you ask?", "If guests can book you elsewhere, connect those calendars after approval so the same night is never sold twice."],
+  name: ["What makes a good description?", "Mention the view, the food and how far the main sights are. Guests read it before they book."],
+  address: ["Why do we need the address?", "Guests see the full address once they have booked, together with the map pin."],
+  pin: ["Is the red pin in the wrong place?", "Tap the map where the entrance is. Use your current location only while you are at the property."],
+  calendar: ["What is calendar sync?", "Paste the calendar link from another site, and dates booked there close here automatically."],
+  facilities: ["What if I don't see a facility I offer?", "These are the ones guests search for most. You can add more from your dashboard after registration."],
+  extras: ["Why parking?", "Most guests in Gilgit-Baltistan arrive by car or jeep and look for parking before they book."],
+  languages: ["Why languages?", "Guests book more easily when they know they can talk to you."],
+  rules: ["What if my house rules change?", "You can change them, and add more rules, from your dashboard after registration."],
+  policies: ["Why the mountain essentials?", "Power cuts, heating and the road in decide many winter trips. Honest answers prevent bad reviews."],
+  rates: ["Why several rate plans?", "Guests sure of their dates take the cheaper non-refundable rate, long stays fill quiet weeks, and solo travellers book rooms that would stay empty."],
+  rooms: ["Can I add more rooms later?", "Yes. Add one category now; you can add more and set prices by date from your dashboard."],
+  photos: ["What if I don't have professional photos?", "A phone camera is fine. Shoot in daylight, keep rooms tidy, and only use photos you took or have permission to use."],
+  payments: ["How do I get paid?", "Pay on arrival guests pay you directly. Pay now money is held by GBBookings and paid out to you after the stay."],
+  invoicing: ["What goes on the invoice?", "The name you choose here, the property's address, and your NTN from your business profile."],
+  howwork: ["Can I change this later?", "Yes. Switch between instant confirmation and request to book any time from your dashboard."],
+};
+
+/** Booking.com asks for at least five photos before a property can open. */
+const MIN_PHOTOS = 5;
 
 type DraftRoom = { input: VendorRoomInput; photos: EditablePhoto[] };
 
@@ -99,7 +156,26 @@ export default function AddHotelWizard({
     location: "",
     checkInTime: homestay ? "13:00" : "14:00",
     checkOutTime: "11:00",
+    // Time windows, as on Booking.com: check-in until, check-out from.
+    checkInUntil: "22:00",
+    checkOutFrom: "07:00",
     howMany: "one" as "one" | "several",
+    languages: [] as string[],
+    partOfChain: false,
+    chainName: "",
+    calendarSync: false,
+    instantBook: false,
+    invoiceAs: "property" as "property" | "legal",
+    invoiceName: "",
+    // Draft only: which other sites list the property (Booking.com offers to import from them).
+    otherSites: [] as string[],
+  });
+  // Booking.com's rate plans, switched on with its suggested percents. Weekly becomes each room's long-stay deal.
+  const [rates, setRates] = useState({
+    policy: "flexible" as Exclude<CancellationPolicy, "non_refundable">,
+    singleGuest: true, singleGuestPercent: 10,
+    nonRefundable: true, nonRefundablePercent: 10,
+    weekly: true, weeklyPercent: 15,
   });
   const [host, setHost] = useState(() => homestayDraft());
   const [pin, setPin] = useState<LatLng>();
@@ -116,15 +192,21 @@ export default function AddHotelWizard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [step, setStep] = useState(0);
+  // The hub (Booking.com's step overview) shows between parts; `furthest` is how far the partner has got.
+  const [showHub, setShowHub] = useState(false);
+  const [furthest, setFurthest] = useState(0);
   const { askReason, dialog } = useReasonDialog();
   const singleUnit = homestay && host.stayType === "entire_home";
   const noun = hotel.hotelType.toLowerCase();
 
+  // Homestays ask languages with the host, so only hotels get their own languages step.
   const steps: StepId[] = [
-    "type", ...(homestay ? ["stay" as const] : []), "count", "confirm", "name",
-    "address", "pin",
-    "facilities", "extras", "rules", "policies", ...(homestay ? ["host" as const] : []),
-    "rooms", "photos", "review", ...(registration ? ["business" as const] : []),
+    "type", ...(homestay ? ["stay" as const] : []), "count", "confirm", "ota", "name",
+    "address", "pin", "calendar",
+    "facilities", "extras", ...(homestay ? [] : ["languages" as const]), "rules", "policies", ...(homestay ? ["host" as const] : []),
+    "rooms", "rates", "photos",
+    "payments", "invoicing", "howwork",
+    "review", ...(registration ? ["business" as const] : []),
   ];
   const id = steps[Math.min(step, steps.length - 1)];
 
@@ -132,13 +214,14 @@ export default function AddHotelWizard({
   const [loadingDraft, setLoadingDraft] = useState(true);
   const [savedAt, setSavedAt] = useState<string>();
   const [resumedFrom, setResumedFrom] = useState<string>();
-  const snapshot = () => ({ hotel, address, extras, host, pin, stayInfo, amenities, facilities, policies, photos, rooms });
+  const snapshot = () => ({ rates, hotel, address, extras, host, pin, stayInfo, amenities, facilities, policies, photos, rooms });
   useEffect(() => {
     let active = true;
     api.getListingDraft(kind).then((draft) => {
       if (!active || !draft) return;
       const data = draft.data as Partial<ReturnType<typeof snapshot>>;
       if (data.hotel) setHotel((value) => ({ ...value, ...data.hotel }));
+      if (data.rates) setRates((value) => ({ ...value, ...data.rates }));
       // Drafts saved before the address had parts keep their one line as the street.
       if (data.address) setAddress(data.address);
       else if (data.hotel?.location) setAddress((value) => ({ ...value, line1: data.hotel!.location }));
@@ -152,6 +235,9 @@ export default function AddHotelWizard({
       setPhotos(data.photos ?? []);
       setRooms(data.rooms ?? []);
       setStep(Math.min(draft.step, steps.length - 1));
+      setFurthest(Math.min(draft.step, steps.length - 1));
+      // Coming back to a saved registration starts on the hub, like Booking.com.
+      if (draft.step > 0) setShowHub(true);
       setSavedAt(draft.updatedAt);
       setResumedFrom(draft.updatedAt);
     }).catch(() => undefined).finally(() => active && setLoadingDraft(false));
@@ -170,16 +256,26 @@ export default function AddHotelWizard({
 
   const problems: Partial<Record<StepId, string>> = {
     name: hotel.title.trim().length < 2 ? "Add the name of your property."
-      : hotel.description.trim().length < 20 ? "Write a description of at least 20 characters." : "",
+      : hotel.description.trim().length < 20 ? "Write a description of at least 20 characters."
+      : hotel.partOfChain && hotel.chainName.trim().length < 2 ? "Add the name of the group, chain or company." : "",
     address: address.line1.trim().length < 2 || address.city.trim().length < 2 ? "Add the street or village and the town." : "",
+    pin: pin ? "" : "Drop a pin on the map where the property is.",
+    ota: hotel.otherSites.length ? "" : "Tick where else the property is listed, or that it isn't listed anywhere else.",
     policies: stayInfoProblem(stayInfo),
     extras: extrasProblem(extras),
     host: host.hostName.trim().length < 2 ? "Add the host name."
       : host.meals.some((meal) => meal.offered && !meal.included && meal.price <= 0) ? "Set a price for each extra meal, or mark it included." : "",
-    rooms: rooms.length === 0 ? (singleUnit ? "Set up the place: bedrooms, beds and price." : "Add at least one room category.") : "",
-    photos: photos.length === 0 ? "Add at least one photo." : "",
+    // An open room form is not saved yet: say so instead of "add a room", and never drop it silently.
+    rooms: editing !== null ? `Press ${editing === "new" && !singleUnit ? "Add this room" : "Save"} to keep this room, or Cancel.`
+      : rooms.length === 0 ? (singleUnit ? "Set up the place: bedrooms, beds and price." : "Add at least one room category.") : "",
+    photos: photos.length < MIN_PHOTOS ? `Upload at least ${MIN_PHOTOS} photos (${photos.length} so far).` : "",
+    rates: ([[rates.singleGuest, rates.singleGuestPercent], [rates.nonRefundable, rates.nonRefundablePercent], [rates.weekly, rates.weeklyPercent]] as const).some(([on, percent]) => on && (percent < 1 || percent > 50))
+      ? "Each discount must be between 1% and 50%." : "",
+    payments: stayInfo.paymentMethods.length ? "" : "Choose at least one way guests can pay at the property.",
+    invoicing: hotel.invoiceAs === "legal" && hotel.invoiceName.trim().length < 2 ? "Add the legal company name for your invoices." : "",
   };
   const firstProblem = (upTo: number) => steps.slice(0, upTo).map((stepId) => problems[stepId]).find(Boolean);
+  const sectionOf = (index: number) => STEP_TEXT[steps[index]].section;
   const go = (next: number) => {
     const blocking = firstProblem(next);
     if (next > step && blocking) {
@@ -188,6 +284,11 @@ export default function AddHotelWizard({
     }
     setError("");
     setEditing(null);
+    // Finishing a part goes back to the hub, as on Booking.com.
+    setShowHub(next > step && sectionOf(next) !== sectionOf(step) && steps[next] !== "business");
+    setFurthest((value) => Math.max(value, next));
+    // The welcome-back note is for the first page after resuming only.
+    setResumedFrom(undefined);
     setStep(next);
     void saveDraft(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -234,12 +335,27 @@ export default function AddHotelWizard({
         price: Math.min(...rooms.map((room) => room.input.basePrice)),
         imageIds: photos.flatMap((photo) => (photo.mediaId ? [photo.mediaId] : [])),
         photos: toPhotoInput(photos),
-        hotelSpecs: { hotelType: hotel.hotelType, amenities, facilities, policies, checkInTime: hotel.checkInTime, checkOutTime: hotel.checkOutTime, ...extrasInput(extras) },
+        hotelSpecs: {
+          hotelType: hotel.hotelType, amenities, facilities, policies, checkInTime: hotel.checkInTime, checkOutTime: hotel.checkOutTime,
+          checkInUntil: hotel.checkInUntil, checkOutFrom: hotel.checkOutFrom,
+          ...(hotel.languages.length ? { languages: hotel.languages } : {}),
+          ...(hotel.partOfChain && hotel.chainName.trim() ? { chainName: hotel.chainName.trim() } : {}),
+          invoiceName: hotel.invoiceAs === "legal" ? hotel.invoiceName.trim() : hotel.title.trim(),
+          ...extrasInput(extras),
+        },
+        instantBook: hotel.instantBook,
+        cancellationPolicy: rates.policy,
+        ratePlans: {
+          ...(rates.singleGuest ? { singleGuestPercent: rates.singleGuestPercent } : {}),
+          ...(rates.nonRefundable ? { nonRefundablePercent: rates.nonRefundablePercent } : {}),
+        },
         ...(homestay ? { homestaySpecs: homestayInput(host) } : {}),
         ...(pin ? { coordinates: pin } : {}),
         stayInfo,
       })).data;
-      for (const room of rooms) await api.addHotelRoom(created.id, { ...emptyRoom, ...room.input, ...(singleUnit ? { totalRooms: 1 } : {}) });
+      // The weekly rate plan is a long-stay deal on each room (7 nights or more).
+      const weekly = rates.weekly ? { longStay: { nights: 7, percent: rates.weeklyPercent } } : undefined;
+      for (const room of rooms) await api.addHotelRoom(created.id, { ...emptyRoom, ...room.input, ...(singleUnit ? { totalRooms: 1 } : {}), ...(weekly && !room.input.deals?.longStay ? { deals: { ...room.input.deals, ...weekly } } : {}) });
       if (submit) created = (await api.submitHotelListing(created.id)).data;
       onDone(created, submit
         ? `${created.title} was submitted. You will get an email once GBBookings has checked it.`
@@ -262,47 +378,116 @@ export default function AddHotelWizard({
     ["Address", `${addressLine(address) || "—"}${pin ? " · map pin set" : " · no map pin"}`, "address"],
     ["Facilities", [...amenities, ...facilities].join(", ") || "None added", "facilities"],
     [homestay ? "Parking" : "Breakfast & parking", extrasLines(extrasInput(extras)).join(" · "), "extras"],
-    ["House rules", `Check-in from ${hotel.checkInTime}, check-out by ${hotel.checkOutTime}${policies.length ? ` · ${policies.join(", ")}` : ""}`, "rules"],
-    ["Policies & essentials", `Pay by ${stayInfo.paymentMethods.map((method) => PAYMENT_LABELS[method]).join(", ") || "—"} · children ${stayInfo.childrenAllowed ? "welcome" : "not allowed"} · ${openSeason(stayInfo.openMonths)}`, "policies"],
+    ["Calendar sync", hotel.calendarSync ? "Will connect another calendar" : "Not now", "calendar"],
+    ...(homestay ? [] : [["Languages", hotel.languages.join(", ") || "None added", "languages"] as [string, string, StepId]]),
+    ["House rules", `Check-in ${hotel.checkInTime}–${hotel.checkInUntil}, check-out ${hotel.checkOutFrom}–${hotel.checkOutTime}${policies.length ? ` · ${policies.join(", ")}` : ""}`, "rules"],
+    ["Policies & essentials", `Children ${stayInfo.childrenAllowed ? "welcome" : "not allowed"} · pets ${!stayInfo.petsAllowed ? "not allowed" : stayInfo.petsOnRequest ? "on request" : "allowed"} · ${openSeason(stayInfo.openMonths)}`, "policies"],
+    ["Payments", `Pay now online, or on arrival by ${stayInfo.paymentMethods.map((method) => PAYMENT_LABELS[method]).join(", ") || "—"}`, "payments"],
+    ["Invoicing", hotel.invoiceAs === "legal" ? hotel.invoiceName || "—" : hotel.title || "Property name", "invoicing"],
+    ["Bookings", hotel.instantBook ? "Instant confirmation" : "Request to book", "howwork"],
     ...(homestay ? [["Host & meals", `${host.hostName || "—"}${host.languages.length ? ` · ${host.languages.join(", ")}` : ""} · ${offeredMeals.length ? offeredMeals.map((meal) => `${meal.type} ${meal.included ? "included" : `PKR ${meal.price}`}`).join(", ") : "no meals"}`, "host"] as [string, string, StepId]] : []),
     ["Rooms", rooms.map((room) => singleUnit
       ? [room.input.bedType, ...roomFacts(room.input), `up to ${room.input.maxAdults + room.input.maxChildren} guests`].join(", ")
       : `${room.input.name} (${room.input.totalRooms})`).join(", ") || "None yet", "rooms"],
+    ["Rate plans", [`Standard, ${CANCELLATION_POLICIES[rates.policy].label.toLowerCase()} cancellation`, rates.nonRefundable && `non-refundable −${rates.nonRefundablePercent}%`, rates.weekly && `weekly −${rates.weeklyPercent}%`, rates.singleGuest && `one guest −${rates.singleGuestPercent}%`].filter(Boolean).join(" · "), "rates"],
     ["Photos", `${photos.length} photo${photos.length === 1 ? "" : "s"}`, "photos"],
   ];
+
+  // The hub: one card per part, done once the partner has gone past its last step with nothing missing.
+  const hubParts = SECTIONS.map((name, index) => {
+    const ids = steps.filter((stepId) => STEP_TEXT[stepId].section === name && stepId !== "review" && stepId !== "business");
+    const first = steps.indexOf(ids[0]);
+    const last = steps.indexOf(ids[ids.length - 1]);
+    return { name, index, first, done: furthest > last && ids.every((stepId) => !problems[stepId]) };
+  });
+  const HUB_TEXT: Record<Section, [string, string]> = {
+    "Property details": ["The basics. Add your property name, address, facilities and more.", "Add property details"],
+    Units: [singleUnit ? "Tell us about the place: bedrooms, beds and price." : "Tell us about your first room. Once you've set one up, you can add more.", singleUnit ? "Set up the place" : "Add unit"],
+    Photos: ["Share some photos of your property so guests know what to expect.", "Add photos"],
+    "Final steps": ["Set up payments and invoicing before you open for bookings.", "Add final details"],
+  };
+  const openPart = (first: number) => { setShowHub(false); setError(""); setStep(first); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const allDone = hubParts.every((part) => part.done);
 
   if (loadingDraft)
     return <div className="flex min-h-64 items-center justify-center" role="status"><LoaderCircle className="size-7 animate-spin text-[#006F3C]" /><span className="sr-only">Loading your saved progress</span></div>;
 
-  const section = STEP_TEXT[id].section;
-  const sectionIndex = SECTIONS.indexOf(section);
   const last = id === "review" || id === "business";
+  const hub = showHub || id === "review";
 
   return (
     <div className="flex flex-wrap items-start gap-7">
       {dialog}
       <div className="min-w-0 flex-[999_1_520px] space-y-5">
-        {/* Progress: sections done, the current one, and how far through the whole flow. */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <ol className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold" aria-label="Sections">
-              {SECTIONS.filter((name) => steps.some((stepId) => STEP_TEXT[stepId].section === name)).map((name) => {
-                const index = SECTIONS.indexOf(name);
-                return <li key={name} aria-current={name === section ? "step" : undefined} className={`flex items-center gap-1 ${index < sectionIndex ? "text-[#006F3C]" : index === sectionIndex ? "text-slate-900" : "text-slate-400"}`}>
-                  {index < sectionIndex && <Check className="size-3.5" />}{name}
-                </li>;
+        {hub ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{hotel.title || `Your ${noun}`}</h2>
+                <p className="mt-1 text-sm text-slate-500">{STEP_TEXT.review.intro}</p>
+              </div>
+              <div className="flex shrink-0 gap-3 text-sm font-semibold">
+                {savedAt && <button type="button" onClick={discard} disabled={busy} className="min-h-11 text-rose-700 hover:text-rose-900">Discard</button>}
+                <button type="button" onClick={exit} disabled={busy} className="min-h-11 text-slate-600 hover:text-slate-900">Save and exit</button>
+              </div>
+            </div>
+            {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+            <ol className="space-y-3">
+              {hubParts.map((part) => {
+                const locked = hubParts.slice(0, part.index).some((before) => !before.done);
+                const rows = reviewRows.filter(([, , target]) => STEP_TEXT[target].section === part.name);
+                return (
+                  <li key={part.name} className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span aria-hidden="true" className={`flex size-9 shrink-0 items-center justify-center rounded-full ${part.done ? "bg-[#006F3C] text-white" : "border-2 border-slate-300 text-slate-400"}`}>
+                        {part.done ? <Check className="size-5" /> : part.index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-500">Step {part.index + 1}{part.done ? " · done" : ""}</p>
+                        <h3 className="font-extrabold">{part.name}</h3>
+                        <p className="text-sm text-slate-500">{HUB_TEXT[part.name][0]}</p>
+                      </div>
+                      {part.done
+                        ? <button type="button" className="min-h-11 text-sm font-bold text-[#006F3C]" onClick={() => openPart(part.first)}>Edit</button>
+                        : <button type="button" className={locked ? secondaryButton : primaryButton} disabled={locked} onClick={() => openPart(part.first)}>{HUB_TEXT[part.name][1]}</button>}
+                    </div>
+                    {part.done && rows.length > 0 && (
+                      <dl className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                        {rows.map(([label, value, target]) => (
+                          <div key={label} className="flex flex-wrap items-baseline justify-between gap-x-3">
+                            <dt className="text-sm font-bold">{label}</dt>
+                            <dd className="min-w-0 flex-1 text-right text-sm text-slate-600">{value} <button type="button" className="ml-2 font-bold text-[#006F3C]" onClick={() => openPart(steps.indexOf(target))}>Edit</button></dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                    {part.name === "Photos" && part.done && <div className="mt-3 flex gap-2 overflow-x-auto">{photos.slice(0, 6).map((photo, at) => <img key={at} src={photo.url} alt="" className="h-14 w-20 shrink-0 rounded-md object-cover" />)}</div>}
+                  </li>
+                );
               })}
             </ol>
-            <div className="flex shrink-0 gap-3 text-sm font-semibold">
-              {savedAt && <button type="button" onClick={discard} disabled={busy} className="min-h-11 text-rose-700 hover:text-rose-900">Discard</button>}
-              <button type="button" onClick={exit} disabled={busy} className="min-h-11 text-slate-600 hover:text-slate-900">Save and exit</button>
-            </div>
+            {registration ? (
+              <button type="button" className={`${primaryButton} w-full`} disabled={!allDone} onClick={() => go(steps.indexOf("business"))}>Continue to partner verification</button>
+            ) : (
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className={secondaryButton} disabled={busy} onClick={() => finish(false)}>Save as draft</button>
+                <button type="button" className={primaryButton} disabled={busy || !allDone} onClick={() => finish(true)}>{busy && <LoaderCircle className="size-4 animate-spin" />}Complete registration</button>
+              </div>
+            )}
+            {!allDone && <p className="text-center text-xs text-slate-500">Finish every step to complete your registration. Your progress is saved.</p>}
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={step + 1} aria-label={`Step ${step + 1} of ${steps.length}`}>
-            <div className="h-full rounded-full bg-[#006F3C] transition-all" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+        ) : <>
+        {/* Like Booking.com: no step counter on the pages, only the property and a way out; progress lives on the hub. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <p className="min-w-0 truncate text-sm text-slate-500" aria-label={STEP_TEXT[id].section}>
+            {hotel.title ? <><strong className="text-slate-900">{hotel.title}</strong>{addressLine(address) && ` · ${addressLine(address)}`}</> : `New ${noun}`}
+          </p>
+          <div className="flex shrink-0 gap-3 text-sm font-semibold">
+            {savedAt && <button type="button" onClick={discard} disabled={busy} className="min-h-11 text-rose-700 hover:text-rose-900">Discard</button>}
+            <button type="button" onClick={exit} disabled={busy} className="min-h-11 text-slate-600 hover:text-slate-900">Save and exit</button>
           </div>
-          <p className="text-xs text-slate-500">Step {step + 1} of {steps.length}{savedAt && ` · Saved ${new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</p>
         </div>
+        <div className={`space-y-5 ${id === "rooms" || id === "policies" || id === "host" ? "max-w-3xl" : "max-w-xl"}`}>
 
         {resumedFrom && step > 0 && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Welcome back. We kept everything you entered on {new Date(resumedFrom).toLocaleString()}, so you can carry on from here.</p>}
 
@@ -317,9 +502,21 @@ export default function AddHotelWizard({
             {(homestay ? HOME_TYPES : HOTEL_TYPES).map((value) => (
               <label key={value} className={choiceClass(hotel.hotelType === value)}>
                 <input type="radio" name="property-type" className="mt-1 size-4 accent-[#006F3C]" checked={hotel.hotelType === value} onChange={() => setHotel({ ...hotel, hotelType: value })} />
-                <span className="text-sm font-bold">{value}</span>
+                <span><span className="block text-sm font-bold">{value}</span>{TYPE_TEXT[value] && <span className="text-xs leading-5 text-slate-500">{TYPE_TEXT[value]}</span>}</span>
               </label>
             ))}
+          </div>
+        )}
+
+        {id === "ota" && (
+          <div className="space-y-1 rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="pb-2 text-sm text-slate-600">If your property is on other travel sites, tell us. You can connect their calendars later so you are never double-booked.</p>
+            {OTHER_SITES.map((site) => {
+              const none = site === OTHER_SITES[OTHER_SITES.length - 1];
+              const on = hotel.otherSites.includes(site);
+              return <label key={site} className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[#006F3C]" checked={on}
+                onChange={() => setHotel({ ...hotel, otherSites: on ? hotel.otherSites.filter((item) => item !== site) : none ? [site] : [...hotel.otherSites.filter((item) => item !== OTHER_SITES[OTHER_SITES.length - 1]), site] })} />{site}</label>;
+            })}
           </div>
         )}
 
@@ -377,6 +574,12 @@ export default function AddHotelWizard({
             {!homestay && <Field label="Official star rating (if you have one)" wide>
               <StarsField value={extras.stars} onChange={(stars) => setExtras({ ...extras, stars })} className={inputClass} />
             </Field>}
+            {!homestay && <fieldset className="sm:col-span-2">
+              <legend className="text-sm font-semibold text-slate-700">Are you a property management company or part of a group or chain?</legend>
+              <div className="mt-1 flex gap-4">{([[false, "No"], [true, "Yes"]] as const).map(([value, text]) =>
+                <label key={text} className="flex min-h-11 items-center gap-2 text-sm"><input type="radio" name="chain" className="size-4 accent-[#006F3C]" checked={hotel.partOfChain === value} onChange={() => setHotel({ ...hotel, partOfChain: value })} />{text}</label>)}</div>
+              {hotel.partOfChain && <input className={inputClass} maxLength={120} value={hotel.chainName} onChange={(e) => setHotel({ ...hotel, chainName: e.target.value })} placeholder="Name of the group, chain or company" aria-label="Name of the group, chain or company" />}
+            </fieldset>}
             <Field label="Tourism department registration number (if you have one)" wide>
               <input className={inputClass} maxLength={60} value={extras.licenceNumber ?? ""} onChange={(e) => setExtras({ ...extras, licenceNumber: e.target.value })} placeholder="e.g. GB Tourism Department registration" />
             </Field>
@@ -406,8 +609,11 @@ export default function AddHotelWizard({
 
         {id === "rules" && (
           <div className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-2">
+            <p className="text-sm font-bold text-slate-900 sm:col-span-2">What are your check-in and check-out times?</p>
             <Field label="Check-in from"><TimeInput className={inputClass} value={hotel.checkInTime} onChange={(e) => setHotel({ ...hotel, checkInTime: e.target.value })} /></Field>
-            <Field label="Check-out by"><TimeInput className={inputClass} value={hotel.checkOutTime} onChange={(e) => setHotel({ ...hotel, checkOutTime: e.target.value })} /></Field>
+            <Field label="Check-in until"><TimeInput className={inputClass} value={hotel.checkInUntil} onChange={(e) => setHotel({ ...hotel, checkInUntil: e.target.value })} /></Field>
+            <Field label="Check-out from"><TimeInput className={inputClass} value={hotel.checkOutFrom} onChange={(e) => setHotel({ ...hotel, checkOutFrom: e.target.value })} /></Field>
+            <Field label="Check-out until"><TimeInput className={inputClass} value={hotel.checkOutTime} onChange={(e) => setHotel({ ...hotel, checkOutTime: e.target.value })} /></Field>
             <div className="sm:col-span-2">
               <ChipInput label="House rules" value={policies} onChange={setPolicies}
                 suggestions={homestay ? ["No smoking indoors", "No alcohol", "Modest dress in the village", "Families and couples only", "Quiet hours after 10 pm", "ID required at check-in"] : ["No smoking indoors", "No pets", "ID required at check-in", "Quiet hours after 10 pm"]} />
@@ -415,7 +621,73 @@ export default function AddHotelWizard({
           </div>
         )}
 
-        {id === "policies" && <div className="rounded-2xl border border-slate-200 bg-white p-5"><StayInfoFields value={stayInfo} onChange={setStayInfo} /></div>}
+        {id === "calendar" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([[true, "Yes, I'll connect my calendar", "Paste an iCal link from Airbnb, Booking.com or Google Calendar after GBBookings approves the property."],
+              [false, "No, not at this time", "You can connect one later from Calendar sync on each room."]] as const).map(([value, label, text]) => (
+              <label key={label} className={choiceClass(hotel.calendarSync === value)}>
+                <input type="radio" name="calendar-sync" checked={hotel.calendarSync === value} onChange={() => setHotel({ ...hotel, calendarSync: value })} className="mt-1 size-4 accent-[#006F3C]" />
+                <span><span className="block text-sm font-bold">{label}</span><span className="text-xs text-slate-500">{text}</span></span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {id === "languages" && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex flex-wrap gap-2">
+              {STAFF_LANGUAGES.map((language) => {
+                const on = hotel.languages.includes(language);
+                return <button key={language} type="button" aria-pressed={on} onClick={() => setHotel({ ...hotel, languages: on ? hotel.languages.filter((item) => item !== language) : [...hotel.languages, language] })}
+                  className={`min-h-11 rounded-full border px-3.5 text-sm font-semibold ${on ? "border-[#006F3C] bg-emerald-50 text-emerald-900" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>{language}</button>;
+              })}
+            </div>
+            <div className="mt-4"><ChipInput label="Other languages" value={hotel.languages.filter((item) => !STAFF_LANGUAGES.includes(item))}
+              onChange={(others) => setHotel({ ...hotel, languages: [...hotel.languages.filter((item) => STAFF_LANGUAGES.includes(item)), ...others] })} suggestions={[]} /></div>
+          </div>
+        )}
+
+        {id === "payments" && (
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 p-4"><p className="text-sm font-bold">Pay now, online</p><p className="mt-1 text-xs leading-5 text-slate-500">Guests pay by card or mobile wallet through Safepay when they book. GBBookings handles the payment and refunds, and pays you out.</p></div>
+              <div className="rounded-xl border border-slate-200 p-4"><p className="text-sm font-bold">Pay on arrival</p><p className="mt-1 text-xs leading-5 text-slate-500">Guests pay you at the property. Choose below how they can pay there.</p></div>
+            </div>
+            <PaymentMethodsField value={stayInfo} onChange={setStayInfo} />
+          </div>
+        )}
+
+        {id === "invoicing" && (
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="text-sm font-bold">What name should be on the invoice?</p>
+            {([["property", hotel.title || "The property name"], ["legal", "Legal company name (please specify)"]] as const).map(([value, label]) => (
+              <label key={value} className="flex min-h-11 items-center gap-2 text-sm"><input type="radio" name="invoice-as" className="size-4 accent-[#006F3C]" checked={hotel.invoiceAs === value} onChange={() => setHotel({ ...hotel, invoiceAs: value })} />{label}</label>
+            ))}
+            {hotel.invoiceAs === "legal" && <input className={inputClass} maxLength={160} value={hotel.invoiceName} onChange={(e) => setHotel({ ...hotel, invoiceName: e.target.value })} placeholder="e.g. Shigar Hospitality (Pvt) Ltd" aria-label="Legal company name" />}
+            <p className="text-xs text-slate-500">Invoices use the property's address. Your NTN and bank details are part of your business profile.</p>
+          </div>
+        )}
+
+        {id === "howwork" && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([[false, "Request to book", "You confirm each Pay on arrival request within a day; it expires if you don't. Pay now bookings are always confirmed at once."],
+                [true, "Instant confirmation", "Every booking is confirmed straight away, as on Booking.com. Keep your calendar up to date and close dates you can't take."]] as const).map(([value, label, text]) => (
+                <label key={label} className={choiceClass(hotel.instantBook === value)}>
+                  <input type="radio" name="instant-book" checked={hotel.instantBook === value} onChange={() => setHotel({ ...hotel, instantBook: value })} className="mt-1 size-4 accent-[#006F3C]" />
+                  <span><span className="block text-sm font-bold">{label}</span><span className="text-xs leading-5 text-slate-500">{text}</span></span>
+                </label>
+              ))}
+            </div>
+            <dl className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
+              <div><dt className="font-bold">Can I decide when I get bookings?</dt><dd className="text-slate-600">Yes. Keep your calendar up to date and close any dates you don't want bookings, including dates booked on other sites.</dd></div>
+              <div><dt className="font-bold">When does my property go live?</dt><dd className="text-slate-600">After GBBookings checks it, usually within a day. You can pause it any time from your dashboard.</dd></div>
+              <div><dt className="font-bold">What does it cost?</dt><dd className="text-slate-600">A commission on each completed booking, shown under every room price. Listing is free.</dd></div>
+            </dl>
+          </div>
+        )}
+
+        {id === "policies" && <div className="rounded-2xl border border-slate-200 bg-white p-5"><StayInfoFields value={stayInfo} onChange={setStayInfo} payments={false} /></div>}
 
         {id === "host" && <div className="rounded-2xl border border-slate-200 bg-white p-5"><HomestayHostFields value={host} onChange={setHost} onUploadingChange={setUploading} /></div>}
 
@@ -432,7 +704,7 @@ export default function AddHotelWizard({
                   <p className="font-extrabold">{room.input.name}</p>
                   <p className="mt-0.5 text-sm text-slate-500">
                     {singleUnit ? "" : `${room.input.totalRooms} room${room.input.totalRooms === 1 ? "" : "s"} · `}
-                    {[room.input.bedType, ...roomFacts(room.input)].join(" · ")} · {room.input.maxAdults} adults, {room.input.maxChildren} children · PKR {room.input.basePrice.toLocaleString()}/night
+                    {[room.input.bedType, ...roomFacts(room.input)].join(" · ")} · {room.input.maxAdults} adult{room.input.maxAdults === 1 ? "" : "s"}, {room.input.maxChildren} {room.input.maxChildren === 1 ? "child" : "children"} · PKR {room.input.basePrice.toLocaleString()}/night
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -452,37 +724,64 @@ export default function AddHotelWizard({
           </div>
         )}
 
-        {id === "photos" && <div className="rounded-2xl border border-slate-200 bg-white p-5"><PhotoManager photos={photos} onChange={setPhotos} max={20} label="Property photos" onUploadingChange={setUploading} /></div>}
-
-        {id === "review" && (
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
-            {reviewRows.map(([name, value, target]) => (
-              <div key={name} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                <div className="min-w-0"><p className="text-sm font-bold">{name}</p><p className="text-sm text-slate-600">{value}</p></div>
-                <button type="button" className="min-h-11 text-sm font-bold text-[#006F3C]" onClick={() => go(steps.indexOf(target))}>Edit</button>
+        {id === "rates" && (() => {
+          const example = fromPrice ?? 0;
+          const off = (percent: number) => Math.round(example * (100 - percent) / 100);
+          const plan = (on: boolean, toggle: (on: boolean) => void, title: string, text: string, percent: number, setPercent: (value: number) => void) => (
+            <div className={`rounded-xl border p-4 ${on ? "border-[#006F3C] bg-emerald-50/40" : "border-slate-200"}`}>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input type="checkbox" className="mt-1 size-4 accent-[#006F3C]" checked={on} onChange={(event) => toggle(event.target.checked)} />
+                <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{title}</span><span className="text-xs leading-5 text-slate-500">{text}</span></span>
+              </label>
+              {on && <div className="mt-3 flex flex-wrap items-center gap-2 pl-7 text-sm">
+                <input type="number" min={1} max={50} aria-label={`${title} percent off`} value={percent} onChange={(event) => setPercent(Number(event.target.value))} className="min-h-11 w-20 rounded-lg border border-slate-300 px-3" />
+                <span>% less than the standard rate{example > 0 && percent >= 1 && percent <= 50 ? ` · PKR ${off(percent).toLocaleString()} instead of PKR ${example.toLocaleString()} a night` : ""}</span>
+              </div>}
+            </div>
+          );
+          return (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-sm font-bold">Standard rate plan</p>
+                <p className="mt-1 text-sm text-slate-600">Your room prices as set{example > 0 ? `, from PKR ${example.toLocaleString()} a night` : ""}. Children stay free: room prices don't change with children.</p>
+                <p className="mt-3 text-sm font-semibold text-slate-700">Cancellation policy <span className="font-normal text-slate-500">· for Pay now bookings, the whole property</span></p>
+                <div className="mt-2 space-y-2">
+                  {(["flexible", "moderate", "strict"] as const).map((key) => (
+                    <label key={key} className={choiceClass(rates.policy === key)}>
+                      <input type="radio" name="cancellation-policy" className="mt-1 size-4 accent-[#006F3C]" checked={rates.policy === key} onChange={() => setRates({ ...rates, policy: key })} />
+                      <span><span className="block text-sm font-bold">{CANCELLATION_POLICIES[key].label}</span><span className="text-xs text-slate-500">{policyLines(key).join(". ")}.</span></span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+              {plan(rates.nonRefundable, (on) => setRates({ ...rates, nonRefundable: on }), "Non-refundable rate plan", "Guests pay less but can't cancel for a refund. Offered with Pay now only, so the money is paid when they book.", rates.nonRefundablePercent, (value) => setRates({ ...rates, nonRefundablePercent: value }))}
+              {plan(rates.weekly, (on) => setRates({ ...rates, weekly: on }), "Weekly rate plan", "Guests who stay 7 nights or more pay less. Same cancellation policy as the standard rate.", rates.weeklyPercent, (value) => setRates({ ...rates, weeklyPercent: value }))}
+              {plan(rates.singleGuest, (on) => setRates({ ...rates, singleGuest: on }), "Price for one guest", "A room booked for one person costs less than for two.", rates.singleGuestPercent, (value) => setRates({ ...rates, singleGuestPercent: value }))}
+            </div>
+          );
+        })()}
+
+        {id === "photos" && <div className="rounded-2xl border border-slate-200 bg-white p-5"><PhotoManager photos={photos} onChange={setPhotos} max={20} min={MIN_PHOTOS} qualityCheck label="Property photos" onUploadingChange={setUploading} /></div>}
 
         {id === "business" && registration?.(() => void finish(true))}
 
-        <div className="flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-5">
-          {step > 0 ? <button type="button" className={secondaryButton} onClick={() => go(step - 1)}>Back</button> : <span />}
+        <div className="flex gap-3">
+          {step > 0 && <button type="button" aria-label="Back" className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-[#006F3C] bg-white text-[#006F3C] hover:bg-emerald-50" onClick={() => go(step - 1)}><ChevronLeft className="size-5" /></button>}
           {!last ? (
-            <button type="button" className={primaryButton} disabled={uploading || editing !== null} onClick={() => go(step + 1)}>Continue</button>
-          ) : id === "review" && registration ? (
-            <button type="button" className={primaryButton} onClick={() => go(step + 1)}>Continue to your business details</button>
-          ) : id === "review" ? (
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={secondaryButton} disabled={busy} onClick={() => finish(false)}>Save as draft</button>
-              <button type="button" className={primaryButton} disabled={busy} onClick={() => finish(true)}>{busy && <LoaderCircle className="size-4 animate-spin" />}Submit for review</button>
-            </div>
+            <button type="button" className={`${primaryButton} flex-1`} disabled={uploading} onClick={() => go(step + 1)}>Continue</button>
           ) : busy && <p className="flex items-center gap-2 text-sm text-slate-600"><LoaderCircle className="size-4 animate-spin" />Submitting your {noun}…</p>}
         </div>
+        </div>
+        </>}
       </div>
 
-      <aside aria-label="Guest preview" className="hidden w-80 shrink-0 space-y-2.5 xl:block">
+      {!hub && TIPS[id] && (
+        <aside aria-label="Tip" className="mt-14 hidden w-72 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 lg:block">
+          <p className="flex items-start gap-2 text-sm font-bold text-slate-900"><Lightbulb className="mt-0.5 size-4 shrink-0 text-[#006F3C]" aria-hidden="true" />{TIPS[id]![0]}</p>
+          <p className="mt-1.5 text-sm leading-6 text-slate-600">{TIPS[id]![1]}</p>
+        </aside>
+      )}
+      {hub && <aside aria-label="Guest preview" className="hidden w-80 shrink-0 space-y-2.5 xl:block">
         <p className="text-xs font-bold tracking-[0.12em] text-slate-500">HOW GUESTS WILL SEE IT</p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           {photos[0] ? <img src={photos[0].url} alt={photos[0].caption || "Cover photo"} className="h-44 w-full object-cover" />
@@ -501,7 +800,7 @@ export default function AddHotelWizard({
             )}
           </div>
         </div>
-      </aside>
+      </aside>}
     </div>
   );
 }

@@ -6,6 +6,7 @@ export const HEATING_LABELS: Record<StayInfo['heating'][number], string> = { ele
 export const HOT_WATER_LABELS: Record<StayInfo['hotWater'], string> = { always: 'Hot water 24 hours', scheduled: 'Hot water at set times', on_request: 'Hot water on request', none: 'No hot water' };
 export const NETWORK_LABELS: Record<StayInfo['mobileNetworks'][number], string> = { scom: 'SCOM', zong: 'Zong', jazz: 'Jazz', telenor: 'Telenor', ufone: 'Ufone' };
 export const ROAD_LABELS: Record<StayInfo['roadAccess'], string> = { car: 'Any car can reach the door', jeep: 'Jeep / 4×4 needed for the last stretch', walk: 'Last stretch on foot' };
+export const GUEST_POLICY_LABELS: Record<NonNullable<StayInfo['guestPolicy']>, string> = { everyone: 'All guests welcome', families_only: 'Families and married couples only', women_only: 'Female guests only' };
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Open all year" or e.g. "Open Apr–Oct" for a continuous season; otherwise the months listed. */

@@ -1,5 +1,5 @@
 import type { StayInfo } from '../../types';
-import { HEATING_LABELS, HOT_WATER_LABELS, MONTHS, NETWORK_LABELS, PAYMENT_LABELS, POWER_LABELS, ROAD_LABELS } from '../../shared/utils/stayInfo';
+import { GUEST_POLICY_LABELS, HEATING_LABELS, HOT_WATER_LABELS, MONTHS, NETWORK_LABELS, PAYMENT_LABELS, POWER_LABELS, ROAD_LABELS } from '../../shared/utils/stayInfo';
 import Select from '../../shared/components/Select';
 
 export const defaultStayInfo = (): StayInfo => ({
@@ -39,7 +39,12 @@ function YesNo({ label, value, onChange }: { label: string; value: boolean; onCh
 const entries = <K extends string>(labels: Record<K, string>) => Object.entries(labels) as Array<[K, string]>;
 
 /** House rules guests filter on, plus the mountain essentials (power, heating, signal, road, season). */
-export default function StayInfoFields({ value, onChange }: { value: StayInfo; onChange: (value: StayInfo) => void }) {
+export function PaymentMethodsField({ value, onChange }: { value: StayInfo; onChange: (value: StayInfo) => void }) {
+  return <div className="grid gap-5 sm:grid-cols-2"><Toggles legend="How guests can pay at the property" options={entries(PAYMENT_LABELS)} value={value.paymentMethods} onChange={(paymentMethods) => onChange({ ...value, paymentMethods })} /></div>;
+}
+
+/** `payments: false` leaves out the payment methods; the add-property wizard asks them on its own Payments page. */
+export default function StayInfoFields({ value, onChange, payments = true }: { value: StayInfo; onChange: (value: StayInfo) => void; payments?: boolean }) {
   const set = (patch: Partial<StayInfo>) => onChange({ ...value, ...patch });
   return (
     <div className="grid gap-5 sm:grid-cols-2">
@@ -48,12 +53,23 @@ export default function StayInfoFields({ value, onChange }: { value: StayInfo; o
       <label className="text-sm font-semibold text-slate-700">Minimum age to check in <span className="font-normal text-slate-500">(optional)</span>
         <input type="number" min={0} max={30} className={inputClass} value={value.minCheckInAge ?? ''} placeholder="e.g. 18"
           onChange={(e) => set({ minCheckInAge: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-      <YesNo label="Pets allowed" value={value.petsAllowed} onChange={(petsAllowed) => set({ petsAllowed })} />
+      <div className="text-sm font-semibold text-slate-700">Pets allowed
+        <div className="mt-1.5 flex flex-wrap gap-2">{([['yes', 'Yes'], ['request', 'On request'], ['no', 'No']] as const).map(([option, text]) => {
+          const current = !value.petsAllowed ? 'no' : value.petsOnRequest ? 'request' : 'yes';
+          return <button key={option} type="button" aria-pressed={current === option} className={chip(current === option)}
+            onClick={() => set({ petsAllowed: option !== 'no', petsOnRequest: option === 'request' ? true : undefined })}>{text}</button>;
+        })}</div>
+      </div>
       <YesNo label="Smoking allowed indoors" value={value.smokingAllowed} onChange={(smokingAllowed) => set({ smokingAllowed })} />
+      <label className="text-sm font-semibold text-slate-700">Who can stay <span className="font-normal text-slate-500">(shown before booking)</span>
+        <Select className={inputClass} value={value.guestPolicy ?? ''} onChange={(e) => set({ guestPolicy: (e.target.value || undefined) as StayInfo['guestPolicy'] })}>
+          <option value="">Not stated</option>
+          {entries(GUEST_POLICY_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select></label>
+      <YesNo label="Couples must show proof of marriage" value={value.marriageProof ?? false} onChange={(marriageProof) => set({ marriageProof })} />
       <label className="text-sm font-semibold text-slate-700">Extra bed <span className="font-normal text-slate-500">(PKR per night, empty if none)</span>
         <input type="number" min={0} max={100000} className={inputClass} value={value.extraBedPrice ?? ''} placeholder="No extra beds"
           onChange={(e) => set({ extraBedPrice: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-      <Toggles legend="How guests can pay at the property" options={entries(PAYMENT_LABELS)} value={value.paymentMethods} onChange={(paymentMethods) => set({ paymentMethods })} />
+      {payments && <Toggles legend="How guests can pay at the property" options={entries(PAYMENT_LABELS)} value={value.paymentMethods} onChange={(paymentMethods) => set({ paymentMethods })} />}
 
       <h3 className="pt-2 text-base font-bold text-slate-900 sm:col-span-2">Mountain essentials</h3>
       <p className="-mt-3 text-xs text-slate-500 sm:col-span-2">Travellers to Gilgit-Baltistan ask about these before booking. Be honest; it prevents bad reviews.</p>
@@ -66,6 +82,9 @@ export default function StayInfoFields({ value, onChange }: { value: StayInfo; o
       <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Directions note <span className="font-normal text-slate-500">(optional)</span>
         <input maxLength={300} className={inputClass} value={value.roadNote ?? ''} placeholder="e.g. 10-minute walk up from the Altit Fort parking; we carry luggage"
           onChange={(e) => set({ roadNote: e.target.value || undefined })} /></label>
+      <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Arrival instructions <span className="font-normal text-slate-500">(optional; only guests with a confirmed booking see this)</span>
+        <textarea maxLength={600} rows={3} className={`${inputClass} py-2`} value={value.arrivalNote ?? ''} placeholder="e.g. Call Karim on 03xx xxxxxxx from Aliabad bazaar; he meets you at the jeep stand. Green gate after the mosque."
+          onChange={(e) => set({ arrivalNote: e.target.value || undefined })} /></label>
       <Toggles legend="Mobile signal at the property" hint="Leave empty if there is no signal." options={entries(NETWORK_LABELS)} value={value.mobileNetworks} onChange={(mobileNetworks) => set({ mobileNetworks })} />
       <Toggles legend="Months you receive guests" hint="Many places close in winter. Also close those dates in the availability calendar."
         options={MONTHS.map((month, index) => [index + 1, month] as [number, string])} value={value.openMonths} onChange={(openMonths) => set({ openMonths: [...openMonths].sort((a, b) => a - b) })} />

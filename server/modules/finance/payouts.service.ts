@@ -1,17 +1,16 @@
 import { inTransaction } from '../../database/transaction.js';
-import { BookingModel } from '../../models/booking.model.js';
+import { BookingModel, type BookingStatus } from '../../models/booking.model.js';
 import { PayoutModel } from '../../models/payout.model.js';
-import { VendorMemberModel } from '../../models/vendor-member.model.js';
 import { VendorModel } from '../../models/vendor.model.js';
 import { AppError } from '../../shared/app-error.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
 import type { SessionMetadata } from '../auth/auth.service.js';
 import { escapeHtml } from '../email/auth-email.templates.js';
 import { isEmailConfigured, sendTransactionalEmail } from '../email/resend.service.js';
-import { MEMBER_ACCESS } from '../vendors/member-access.js';
+import { vendorIdsFor } from '../vendors/member-access.js';
 import { settlement, settlementDue } from './settlement.js';
 
-const UNSETTLED = { vendorId: { $ne: null }, payoutId: null, status: { $in: ['completed', 'no_show', 'cancelled'] } };
+const UNSETTLED = { vendorId: { $ne: null }, payoutId: null, status: { $in: ['completed', 'no_show', 'cancelled'] as BookingStatus[] } };
 
 const sums = (lines: Array<{ collectedOnlineMinor: number; refundedMinor: number; commissionMinor: number; netMinor: number }>) => lines.reduce(
   (total, line) => ({
@@ -48,7 +47,11 @@ function serializePayout(payout: any, full = false) {
 const unsettledFor = async (vendorId: unknown, session?: any) =>
   ((await BookingModel.find({ ...UNSETTLED, vendorId }).session(session ?? null).lean()) as any[]).filter(settlementDue);
 
-/** Admin: what each partner is owed or owes right now. ponytail: loads every unsettled booking; aggregate if volumes grow. */
+/**
+ * Admin: what each partner is owed or owes right now.
+ * ponytail: reads the unsettled bookings (not the whole collection) and sums them with the same `settlement` rules statements
+ * use, so the two can never disagree. Move to an aggregation only if the unsettled set itself gets large.
+ */
 export async function listBalances() {
   const bookings = ((await BookingModel.find(UNSETTLED).select('vendorId status paymentMethod paymentStatus pricing refunds noShow').lean()) as any[]).filter(settlementDue);
   const byVendor = new Map<string, any[]>();
@@ -119,7 +122,8 @@ export async function reconciliation(range: { from: string; to: string }) {
   const end = new Date(Date.parse(`${range.to}T00:00:00+05:00`) + 86_400_000);
   const [paid, refundRows, payouts] = await Promise.all([
     BookingModel.find({ paymentMethod: 'online', paymentStatus: 'paid', paidAt: { $gte: start, $lt: end } }).select('pricing').lean(),
-    BookingModel.find({ refunds: { $elemMatch: { channel: 'safepay' } } }).select('refunds').lean(),
+    // Only refunds that count here: still owed (whenever they were raised), or raised or sent in the period.
+    BookingModel.find({ refunds: { $elemMatch: { channel: 'safepay', $or: [{ status: { $ne: 'sent' } }, { sentAt: { $gte: start, $lt: end } }, { createdAt: { $gte: start, $lt: end } }] } } }).select('refunds').lean(),
     PayoutModel.find({ status: 'settled', settledAt: { $gte: start, $lt: end } }).select('netMinor commissionMinor').lean(),
   ]) as any[][];
   const refunds = refundRows.flatMap((booking) => booking.refunds).filter((refund: any) => refund.channel === 'safepay');
@@ -142,9 +146,9 @@ export async function reconciliation(range: { from: string; to: string }) {
 
 /** Partner: running balance, the bookings behind it, and past statements. Owner, manager and finance only. */
 async function partnerVendorId(userId: string) {
-  const membership = await VendorMemberModel.findOne({ userId, status: 'active', deletedAt: null, role: { $in: MEMBER_ACCESS.reports } }).select('vendorId').lean() as any;
-  if (!membership) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Payouts are available to the owner, managers and finance.');
-  return membership.vendorId;
+  const [vendorId] = await vendorIdsFor(userId, 'reports');
+  if (!vendorId) throw new AppError(403, 'VENDOR_ACCESS_REQUIRED', 'Payouts are available to the owner, managers and finance.');
+  return vendorId;
 }
 
 export async function partnerFinance(userId: string) {

@@ -10,7 +10,7 @@ import { ArrowRight, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, 
 import type { Booking, Listing } from '../../types';
 import { handleImageError } from '../../types';
 import { api, ApiError, type AuthUser, type Paginated, type VendorProfile } from '../../shared/api/api';
-import { formatDateForDisplay } from '../../shared/utils/date';
+import { formatDateForDisplay, nextDay } from '../../shared/utils/date';
 import { useBodyScrollLock } from '../../shared/utils/scrollLock';
 import SecurityPanel from './SecurityPanel';
 import { ReviewDialog } from '../reviews/ReviewParts';
@@ -113,7 +113,7 @@ function BookingsPage({ setView, onSelectBooking, onMessage, paymentReturn, user
       sendToPayment(tab, url);
       if (tab) { setPaying({ bookingId: booking.id, url }); setPayingId(null); }
     }
-    catch (reason) { tab?.close(); setPaymentNotice({ tone: 'warn', text: reason instanceof Error ? reason.message : 'The payment page did not open. Please try again.' }); setPayingId(null); }
+    catch (reason) { tab?.close(); setPaymentNotice({ tone: 'warn', text: reason instanceof Error ? reason.message : 'The payment page did not open. Please try again.' }); setPayingId(null); }
   };
   const confirmCancellation = async (reason: string) => {
     if (!cancelBooking || cancelLock.current) return;
@@ -166,6 +166,22 @@ function BookingsPage({ setView, onSelectBooking, onMessage, paymentReturn, user
     {changeBooking && <ChangeBookingDialog booking={changeBooking} onClose={() => setChangeBooking(null)} onSent={(updated) => { setBookings((items) => items.map((item) => item.id === updated.id ? updated : item)); setChangeBooking(null); }} />}
     {cancelBooking && <CancelReservationDialog booking={cancelBooking} busy={cancelBusy} error={cancelError} onClose={() => setCancelBooking(null)} onConfirm={confirmCancellation} />}
   </div>;
+}
+
+/** Saves the trip as a calendar file, made in the browser. Car and tour end dates are days of the trip; a stay's is the morning it ends. */
+function downloadCalendar(booking: Booking) {
+  const compact = (date: string) => date.replaceAll('-', '');
+  const text = (value: string) => value.replace(/[\\;,]/g, '\\$&').replace(/\r?\n/g, '\\n');
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//GBBookings//Booking//EN', 'BEGIN:VEVENT',
+    `UID:${booking.id}@gbbookings`, `DTSTAMP:${new Date().toISOString().replace(/[-:]|\.\d{3}/g, '')}`,
+    `DTSTART;VALUE=DATE:${compact(booking.startDate)}`, `DTEND;VALUE=DATE:${compact(booking.rental || booking.tour ? nextDay(booking.endDate) : booking.endDate)}`,
+    `SUMMARY:${text(booking.listingTitle)}`, `LOCATION:${text(booking.listingLocation)}`, `DESCRIPTION:${text(`GBBookings booking ${booking.reference}`)}`,
+    'END:VEVENT', 'END:VCALENDAR', '',
+  ];
+  const url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }));
+  Object.assign(document.createElement('a'), { href: url, download: `${booking.reference || 'booking'}.ics` }).click();
+  URL.revokeObjectURL(url);
 }
 
 const daysUntil = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
@@ -228,6 +244,7 @@ function UpcomingCard({ booking, today, canCancel, paying, onView, onMessage, on
         <button type="button" onClick={onMessage} className={secondaryButton}><MessageSquare className="size-4" aria-hidden="true" />Message partner</button>
         {today <= booking.startDate && !booking.checkedInAt && <button type="button" onClick={onEdit} className={secondaryButton}>Edit details</button>}
         {canCancel && !unpaid && <button type="button" onClick={onChange} className={secondaryButton}>Request a change</button>}
+        {booking.status === 'confirmed' && <button type="button" onClick={() => downloadCalendar(booking)} className={secondaryButton}><CalendarDays className="size-4" aria-hidden="true" />Add to calendar</button>}
         <button type="button" onClick={onHelp} className={secondaryButton}>Get help</button>
         {canCancel && <button type="button" onClick={onCancel} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">Cancel booking</button>}
       </div>
@@ -259,6 +276,7 @@ function CompactCard({ booking, onView, onReview, onDispute, onHelp }: { booking
       {canDispute && <button type="button" onClick={onDispute} className={primaryButton}>I was there</button>}
       {booking.reviewableUntil && <button type="button" onClick={onReview} className={primaryButton}><Star className="size-4" />Write a review</button>}
       <button type="button" onClick={onHelp} className={secondaryButton}>Get help</button>
+      <a href={`/listing/${encodeURIComponent(booking.listingId)}`} className={secondaryButton}>Book again</a>
       <button type="button" onClick={onView} className={secondaryButton}>View<ChevronRight className="size-4" /></button>
     </div>
   </article>;

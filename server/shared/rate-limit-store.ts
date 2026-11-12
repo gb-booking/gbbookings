@@ -6,7 +6,7 @@ type Counter = { _id: string; hits: number; resetAt: Date };
 let ttlIndex: Promise<unknown> | undefined;
 
 /**
- * express-rate-limit store kept in MongoDB, so every server instance (each Vercel function) shares one count per IP.
+ * express-rate-limit store kept in MongoDB, so every server instance shares each user, session or IP counter.
  * ponytail: one database write per limited request; move to Redis (e.g. Upstash) if API traffic makes that a bottleneck.
  */
 export class MongoRateLimitStore implements Store {

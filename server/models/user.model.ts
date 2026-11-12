@@ -36,6 +36,8 @@ const userSchema = new Schema({
     index: true,
   },
   emailVerifiedAt: { type: Date, default: null },
+  // Passed the email code on the partner sign-in page; needed before starting a partner application or listing.
+  partnerVerifiedAt: { type: Date, default: null },
   termsAcceptedAt: { type: Date, default: null },
   policyVersion: { type: String },
   phoneVerifiedAt: { type: Date, default: null },

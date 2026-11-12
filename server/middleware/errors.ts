@@ -16,7 +16,8 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, _nex
         ? new AppError(error.status, 'BAD_REQUEST', 'The request could not be read.')
       : new AppError(500, 'INTERNAL_ERROR', 'An unexpected error occurred.');
 
-  if (normalized.status >= 500) {
+  // A 503 AppError is a feature deliberately switched off (realtime, AI): expected, not a crash.
+  if (normalized.status >= 500 && !(error instanceof AppError && error.status === 503)) {
     console.error(`[${request.id}] ${normalized.message}`, error);
   }
 

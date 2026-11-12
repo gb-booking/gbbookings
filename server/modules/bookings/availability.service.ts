@@ -1,6 +1,49 @@
 import type { ClientSession, Types } from 'mongoose';
+import { inTransaction } from '../../database/transaction.js';
+import { BookingModel, type BookingStatus } from '../../models/booking.model.js';
+import { HotelRoomTypeModel } from '../../models/hotel-room-type.model.js';
 import { RoomNightModel } from '../../models/room-night.model.js';
 import { AppError } from '../../shared/app-error.js';
+import { stayNights, todayInPakistan } from './stay-dates.js';
+
+// Every status except cancelled keeps its rooms (see `transitions` in booking.service).
+const HOLDING_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'completed', 'no_show'];
+
+/**
+ * Scheduled daily: recounts `booked` for today onwards from the bookings themselves and corrects any counter that
+ * differs, so a wrong counter cannot block a cancellation for good. Each room is checked in one transaction that also
+ * touches the room, which makes it wait for a booking or change in progress on that room.
+ */
+export async function recountRoomNights(today = todayInPakistan()) {
+  const roomIds = new Map<string, Types.ObjectId>();
+  for (const id of [
+    ...await RoomNightModel.distinct('roomTypeId', { date: { $gte: today }, booked: { $gt: 0 } }),
+    ...await BookingModel.distinct('roomTypeId', { status: { $in: HOLDING_STATUSES }, checkOut: { $gt: today } }),
+  ]) roomIds.set(String(id), id as Types.ObjectId);
+
+  let corrected = 0;
+  for (const roomTypeId of roomIds.values()) {
+    corrected += await inTransaction(async (session) => {
+      await HotelRoomTypeModel.updateOne({ _id: roomTypeId }, { $inc: { inventoryVersion: 1 } }, { session });
+      const bookings = await BookingModel.find({ roomTypeId, status: { $in: HOLDING_STATUSES }, checkOut: { $gt: today } }).select('checkIn checkOut rooms').session(session).lean() as any[];
+      const expected = new Map<string, number>();
+      for (const booking of bookings) {
+        for (const night of stayNights(booking.checkIn, booking.checkOut, booking.checkIn)) {
+          if (night >= today) expected.set(night, (expected.get(night) ?? 0) + booking.rooms);
+        }
+      }
+      const counters = await RoomNightModel.find({ roomTypeId, date: { $gte: today } }).select('date booked').session(session).lean() as any[];
+      const actual = new Map<string, number>(counters.map((counter) => [counter.date, counter.booked]));
+      const wrong = [...new Set([...expected.keys(), ...actual.keys()])].filter((date) => (expected.get(date) ?? 0) !== (actual.get(date) ?? 0));
+      for (const date of wrong) {
+        console.warn(`Room-night counter corrected: room ${roomTypeId} on ${date} said ${actual.get(date) ?? 0} booked, bookings say ${expected.get(date) ?? 0}.`);
+        await RoomNightModel.updateOne({ roomTypeId, date }, { $set: { booked: expected.get(date) ?? 0 } }, { upsert: true, session });
+      }
+      return wrong.length;
+    });
+  }
+  return corrected;
+}
 
 type RoomRef = { _id: Types.ObjectId; totalRooms: number };
 

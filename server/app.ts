@@ -31,6 +31,7 @@ import { serve } from 'inngest/express';
 import { AppError } from './shared/app-error.js';
 import { isAllowedOrigin } from './shared/origin.js';
 import { MongoRateLimitStore } from './shared/rate-limit-store.js';
+import { apiRateLimitKey } from './shared/rate-limit-key.js';
 
 
 export function createApp(): Express {
@@ -83,8 +84,11 @@ export function createApp(): Express {
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     store: new MongoRateLimitStore('api:'),
+    keyGenerator: apiRateLimitKey,
     passOnStoreError: true,
-    skip: (request) => request.path.startsWith('/health') || request.path.startsWith('/inngest'),
+    // Refresh has its own session limit, including when the access cookie has expired.
+    skip: (request) => request.path.startsWith('/health') || request.path.startsWith('/inngest')
+      || (request.method === 'POST' && /^\/v1\/auth\/refresh\/?$/i.test(request.path)),
   }));
 
   // Inngest signs its calls; the SDK rejects anything else. Off without keys.

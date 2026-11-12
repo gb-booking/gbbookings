@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../shared/app-error.js';
 import { asyncHandler } from '../../shared/async-handler.js';
 import { MongoRateLimitStore } from '../../shared/rate-limit-store.js';
+import { apiRateLimitKey, refreshRateLimitKey } from '../../shared/rate-limit-key.js';
 import {
   requestPasswordReset,
   resetLinkOwner,
@@ -64,9 +65,23 @@ export const authenticationLimiter = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   store: new MongoRateLimitStore('auth:'),
+  keyGenerator: apiRateLimitKey,
   passOnStoreError: true,
   message: {
     error: { code: 'AUTH_RATE_LIMITED', message: 'Too many authentication attempts. Please try again later.' },
+  },
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  store: new MongoRateLimitStore('refresh:'),
+  keyGenerator: refreshRateLimitKey,
+  passOnStoreError: true,
+  message: {
+    error: { code: 'REFRESH_RATE_LIMITED', message: 'Too many session refresh attempts. Please try again later.' },
   },
 });
 
@@ -120,7 +135,7 @@ authRouter.post('/login/verify-otp', authenticationLimiter, validate('body', ver
   response.json({ user: result.user });
 }));
 
-authRouter.post('/refresh', authenticationLimiter, asyncHandler(async (request, response) => {
+authRouter.post('/refresh', refreshLimiter, asyncHandler(async (request, response) => {
   const rawRefreshToken = request.cookies?.[REFRESH_COOKIE];
   if (!rawRefreshToken) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Your session has expired. Please sign in again.');
   const result = await refreshSession(rawRefreshToken, sessionMetadata(request));
