@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate } from '../../middleware/authenticate.js';
+import { permissionsOf } from './rbac.js';
 import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../shared/app-error.js';
 import { asyncHandler } from '../../shared/async-handler.js';
@@ -175,7 +176,8 @@ authRouter.delete('/sessions/:id', authenticate, validate('params', sessionIdPar
 
 authRouter.get('/me', authenticate, asyncHandler(async (request, response) => {
   const user = await getUserById(request.auth!.userId);
-  response.json({ user: user.public });
+  // The staff console builds a custom role's menu from these; the server still checks each request.
+  response.json({ user: { ...user.public, permissions: permissionsOf(request.auth!.roles, request.auth!.extraPermissions) } });
 }));
 
 authRouter.patch('/me', authenticate, validate('body', updateProfileSchema), asyncHandler(async (request, response) => {

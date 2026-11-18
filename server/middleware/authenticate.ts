@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import { connectDatabase } from '../database/connection.js';
 import { SessionModel } from '../models/session.model.js';
 import { UserModel } from '../models/user.model.js';
+import { CustomRoleModel } from '../models/console.models.js';
 import { hasPermission, type PermissionKey } from '../modules/auth/rbac.js';
 import { AppError, ServiceUnavailableError } from '../shared/app-error.js';
 import { ACCESS_COOKIE, verifyAccessToken } from '../modules/auth/auth.tokens.js';
@@ -21,11 +22,18 @@ export async function sessionFromToken(token: string | undefined) {
       revokedAt: null,
       expiresAt: { $gt: new Date() },
     }),
-    UserModel.findOne({ _id: payload.sub, status: 'active', deletedAt: null }).select('roles'),
+    UserModel.findOne({ _id: payload.sub, status: 'active', deletedAt: null }).select('roles customRoleId'),
   ]);
   if (!sessionExists) throw new AppError(401, 'AUTHENTICATION_REQUIRED', 'Your session is no longer active.');
   if (!user) throw new AppError(403, 'ACCOUNT_UNAVAILABLE', 'This account is not currently active.');
-  return { userId: payload.sub, sessionId: payload.sid, roles: user.roles };
+  return { userId: payload.sub, sessionId: payload.sid, roles: user.roles, extraPermissions: await customRolePermissions(user) };
+}
+
+/** A custom staff role's permissions; a disabled or deleted role grants nothing. */
+export async function customRolePermissions(user: { roles?: string[]; customRoleId?: unknown }) {
+  if (!user.roles?.includes('custom_staff') || !user.customRoleId) return [];
+  const role = await CustomRoleModel.findOne({ _id: user.customRoleId, status: 'active' }).select('permissions').lean() as any;
+  return (role?.permissions ?? []) as string[];
 }
 
 export const authenticate: RequestHandler = asyncHandler(async (request, _response, next) => {
@@ -36,7 +44,7 @@ export const authenticate: RequestHandler = asyncHandler(async (request, _respon
 export function authorizePermission(permission: PermissionKey): RequestHandler {
   return (request, _response, next) => {
     if (!request.auth) return next(new AppError(401, 'AUTHENTICATION_REQUIRED', 'Please sign in to continue.'));
-    if (!hasPermission(request.auth.roles, permission)) {
+    if (!hasPermission(request.auth.roles, permission, request.auth.extraPermissions)) {
       return next(new AppError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action.'));
     }
     next();

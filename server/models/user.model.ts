@@ -8,9 +8,18 @@ export const userRoles = [
   'vendor_owner',
   'vendor_staff',
   'admin',
+  'operations_manager',
+  'finance_manager',
+  'support_agent',
+  // Staff whose permissions come from a Super Admin-defined custom role (customRoleId).
+  'custom_staff',
 ] as const;
 
 export type UserRole = typeof userRoles[number];
+
+/** GBBookings employees: they sign in to the console, never to the traveller or partner side. */
+export const staffRoles = ['admin', 'operations_manager', 'finance_manager', 'support_agent', 'custom_staff'] as const satisfies readonly UserRole[];
+export type StaffRole = typeof staffRoles[number];
 
 const userSchema = new Schema({
   publicId: {
@@ -27,6 +36,8 @@ const userSchema = new Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   phone: { type: String, trim: true, maxlength: 30 },
   roles: { type: [String], enum: userRoles, default: ['customer'], required: true },
+  // For 'custom_staff': the custom role whose permissions this user has.
+  customRoleId: { type: Schema.Types.ObjectId, ref: 'CustomRole' },
   // Saved listing public IDs, newest last.
   wishlist: { type: [String], default: [], select: false },
   status: {

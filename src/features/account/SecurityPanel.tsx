@@ -99,7 +99,7 @@ export default function SecurityPanel() {
   const [deleteCode, setDeleteCode] = useState('');
   const [disabling, setDisabling] = useState(false);
   // Partner and admin accounts are closed by support (the server enforces this too).
-  const isAdmin = (user?.roles ?? []).includes('admin');
+  const isAdmin = (user?.roles ?? []).some((role) => ['admin', 'operations_manager', 'finance_manager', 'support_agent'].includes(role));
   const customerOnly = (user?.roles ?? [user?.role ?? 'customer']).every((role) => role === 'customer');
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function SecurityPanel() {
       action={<button type="button" disabled={busy || !user?.emailVerified} className={secondary} onClick={() => void act(sendPasswordCode, 'Unable to send the code.')}>{busy ? 'Sending…' : 'Change password'}</button>} />
     {passwordChallenge && user && <ChangePasswordDialog email={user.email} challengeId={passwordChallenge} onResend={sendPasswordCode} onClose={() => setPasswordChallenge('')} />}
 
-    <Row icon={<ShieldCheck className="size-5" />} title="Two-step sign-in" text={isAdmin ? 'Always on for admin accounts: we email you a code when you sign in on a new device.' : user?.twoFactorEnabled ? `On. We ask for a code from your ${user.twoFactorChannel} when you sign in on a new device.` : 'Ask for an emailed code when signing in on a new device.'}
+    <Row icon={<ShieldCheck className="size-5" />} title="Two-step sign-in" text={isAdmin ? 'Always on for staff accounts:we email you a code when you sign in on a new device.' : user?.twoFactorEnabled ? `On. We ask for a code from your ${user.twoFactorChannel} when you sign in on a new device.` : 'Ask for an emailed code when signing in on a new device.'}
       action={isAdmin ? undefined : user?.twoFactorEnabled
         ? <button type="button" className={danger} disabled={busy} onClick={() => setDisabling(!disabling)}>{disabling ? 'Keep it on' : 'Turn off'}</button>
         : !challengeId && <button type="button" className={secondary} disabled={busy || !user?.emailVerified} onClick={() => void act(async () => { setChallengeId((await api.beginTwoFactorSetup('email')).challengeId); toast('We emailed you a security code.'); }, 'Unable to start two-step sign-in.')}>Turn on</button>}>

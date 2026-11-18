@@ -1,5 +1,6 @@
 import type { InboxStart } from '../features/messages/Inbox';
-import { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, type ReactNode } from 'react';
+import AccountMenu from '../features/account/AccountMenu';
 import { Sparkles } from 'lucide-react';
 import Navbar from '../shared/components/Navbar';
 import MobileAppBottomNav from '../shared/components/MobileAppBottomNav';
@@ -28,6 +29,8 @@ const VendorDashboard = lazy(() => import('../features/vendor/VendorDashboard'))
 const BecomePartner = lazy(() => import('../features/partner/BecomePartner'));
 const PartnerGate = lazy(() => import('../features/partner/PartnerGate'));
 const AdminDashboard = lazy(() => import('../features/admin/AdminDashboard'));
+const GuestPayments = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestPayments })));
+const GuestLoyalty = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestLoyalty })));
 const AiChat = lazy(() => import('../features/planner/AiChat'));
 const LegalPage = lazy(() => import('../features/support/LegalPage'));
 const AboutPage = lazy(() => import('../features/support/AboutPage'));
@@ -42,8 +45,8 @@ const MobileInstallPrompt = lazy(() => import('../shared/components/MobileInstal
 const CookieNotice = lazy(() => import('../shared/components/CookieNotice'));
 
 // Views that need a signed-in user. Every navigation path (navbar, dashboards, deep flows) is gated at render time.
-const PROTECTED_VIEWS = new Set(['bookings', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'admin-dashboard', 'checkout']);
-const STAFF_ROLES = ['admin'];
+const PROTECTED_VIEWS = new Set(['bookings', 'payments', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'admin-dashboard', 'checkout']);
+const STAFF_ROLES = ['admin', 'operations_manager', 'finance_manager', 'support_agent', 'custom_staff'];
 // Granted only when an admin approves the business; applicants are customers until then.
 const VENDOR_ROLES = ['vendor_owner', 'vendor_staff'];
 
@@ -55,7 +58,7 @@ const homeDashboard = (roles: string[]) =>
 
 // URL <-> view sync so refresh, deep links and the browser Back button work.
 // ponytail: hand-rolled History API routing; move to a router library if routes need more params than a listing id.
-const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'offers', 'bookings', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
+const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'offers', 'bookings', 'payments', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
 const SEARCH_TYPES = ['hotel', 'car', 'tour', 'homestay', 'destination', 'offer'] as const;
 type SearchType = typeof SEARCH_TYPES[number];
 
@@ -189,6 +192,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const isStaff = userRoles.some((role) => STAFF_ROLES.includes(role));
   const isVendor = userRoles.some((role) => VENDOR_ROLES.includes(role));
   useEffect(() => {
@@ -214,7 +218,7 @@ export default function App() {
         setAuthChecked(true);
         setUserEmail(user.email);
         setUserName(user.name);
-        setUserRoles(user.roles ?? []);
+        setUserRoles(user.roles ?? []); setUserPermissions(user.permissions ?? []);
         setIsLoggedIn(true);
       })
       .catch(() => {
@@ -352,6 +356,11 @@ export default function App() {
     if (params?.section) window.setTimeout(() => document.getElementById(params.section!)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
   };
 
+  // Signed-in guest pages share the My account menu.
+  const accountFrame = (page: ReactNode) => isLoggedIn
+    ? <div className="lg:flex lg:gap-8"><AccountMenu current={view} onNavigate={handleNavigation} /><div className="min-w-0 flex-1">{page}</div></div>
+    : page;
+
   const handleNavigation = (v: string) => {
     if (v === 'hotels' || v === 'browse-hotels') {
       setView('hotels');
@@ -398,7 +407,7 @@ export default function App() {
     return (
       <div className="min-h-dvh bg-slate-100 font-sans text-slate-900 selection:bg-teal-100 selection:text-teal-950">
         <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-slate-500" role="status">Loading workspace…</div>}>
-          {isLoggedIn && isStaff ? <AdminDashboard key={userId} roles={userRoles} userName={userName} userEmail={userEmail} onSignOut={handleSignOut} />
+          {isLoggedIn && isStaff ? <AdminDashboard key={userId} roles={userRoles} permissions={userPermissions} userName={userName} userEmail={userEmail} onSignOut={handleSignOut} />
               : <main className="flex min-h-dvh items-center justify-center p-6"><section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-700">GBBookings · Administration</p>
                 <h1 className="mt-5 text-2xl font-bold">{isLoggedIn ? 'Admin access required' : 'Sign in to your workspace'}</h1>
@@ -596,9 +605,9 @@ export default function App() {
           />
         )}
 
-        {view === 'inbox' && <Inbox key={`${userId}-${inboxStart?.listingId ?? ''}`} start={inboxStart} />}
+        {view === 'inbox' && accountFrame(<Inbox key={`${userId}-${inboxStart?.listingId ?? ''}`} start={inboxStart} />)}
 
-        {(view === 'bookings' || view === 'profile' || view === 'saved') && (
+        {(view === 'bookings' || view === 'profile' || view === 'saved') && accountFrame(
           <UserDashboard key={`${userId}-${view}`}
             onMessage={(booking) => openInbox({ listingId: booking.listingId, title: booking.listingTitle, image: booking.listingImage })}
             section={view}
@@ -639,9 +648,9 @@ export default function App() {
           />
         )}
 
-        {view === 'support' && (
-          <SupportCentre />
-        )}
+        {view === 'support' && accountFrame(<SupportCentre />)}
+        {view === 'payments' && accountFrame(<GuestPayments />)}
+        {view === 'loyalty' && accountFrame(<GuestLoyalty />)}
 
         {view === 'become-partner' && (!authChecked
           ? <div className="min-h-[40vh] animate-pulse rounded-lg bg-slate-100" aria-label="Loading" />

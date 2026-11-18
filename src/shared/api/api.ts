@@ -46,6 +46,9 @@ export class ApiError extends Error {
 
 let refreshInFlight: Promise<unknown> | null = null;
 
+/** A request whose answer is `{ data }`. */
+const data = <T>(path: string, init?: RequestInit) => request<{ data: T }>(path, init).then((result) => result.data);
+
 async function request<T>(path: string, init: RequestInit = {}, allowRefresh = true): Promise<T> {
   const generation = authGeneration;
   const controller = new AbortController();
@@ -146,6 +149,8 @@ export interface AuthUser {
   twoFactorChannel?: 'email' | 'sms';
   phone?: string;
   memberSince?: string;
+  /** From /auth/me: what this account may do (custom staff roles build their menu from it). */
+  permissions?: string[];
 }
 
 export interface AuthResponse {
@@ -326,8 +331,40 @@ export interface VendorRoom extends RoomLayout {
 }
 
 /** Admin-set money rules: GBBookings' commission, and refunds when a guest cancels a paid booking within N hours of booking. */
+export type ListingKind = 'hotel' | 'homestay' | 'tour' | 'car';
+export type PlatformReport = {
+  from: string; to: string;
+  totals: { bookings: number; revenue: number; commission: number; serviceFees: number; cancelled: number; paidOnline: number };
+  byProduct: Array<{ type: ListingKind; bookings: number; cancelled: number; noShows: number; revenue: number; commission: number; refunds: number; unitsSold: number }>;
+  refunds: { count: number; sent: number; waiting: number };
+  payouts: { settled: number; paidToPartners: number; receivedFromPartners: number };
+  destinations: Array<{ place: string; bookings: number; revenue: number }>;
+};
+export type CustomerRecord = { id: string; name: string; email: string; phone?: string; status: string; joined: string; bookings: number; completed: number; lifetimeValue: number; lastStay?: string; tier: string; vip: boolean; tags: string[]; points: number; referralCode: string };
+export type PaymentRequest = {
+  id: string; type: 'remaining_balance' | 'booking_advance' | 'partial_payment' | 'cancellation_fee' | 'additional_service'; typeLabel: string; amount: number; dueDate: string; note?: string;
+  status: 'draft' | 'sent' | 'overdue' | 'paid' | 'cancelled'; bookingReference?: string; guestName?: string; listingTitle?: string; partnerName?: string; createdAt: string; sentAt?: string; paidAt?: string;
+};
+export type FraudCase = { id: string; rule: string; subject: string; bookingRef?: string; score: number; risk: 'low' | 'medium' | 'high' | 'critical'; reason: string; status: 'open' | 'under_review' | 'cleared' | 'confirmed'; history: Array<{ at: string; by: string; text: string }>; updatedAt: string };
+export type StaffTask = { id: string; title: string; note?: string; dueDate?: string; status: 'open' | 'done'; assignee?: string; createdBy?: string; mine: boolean; doneAt?: string };
+export type StaffSecurity = { id: string; name: string; email: string; roles: string[]; status: string; twoStep: string; locked: boolean; failedLogins: number; activeSessions: number; passwordChangedAt?: string };
+export type MediaItem = { id: string; kind: 'image' | 'document' | 'video'; mimeType: string; bytes: number; status: string; alt?: string; url?: string; createdAt: string };
+export type CustomRole = { id: string; name: string; permissions: string[]; status: 'active' | 'disabled'; users: number };
+export type GuestPayments = {
+  payments: Array<{ bookingId: string; reference: string; listingTitle: string; checkIn: string; bookingStatus: string; method: string; status: string; total: number; balanceDue: number; paidAt?: string }>;
+  refunds: Array<{ reference: string; listingTitle: string; amount: number; status: string; channel: string; sentAt?: string; createdAt: string }>;
+  requests: PaymentRequest[];
+};
+/** "hotels 12%, homestays 12%, tours 10%, cars 8%" for partner-facing copy. */
+export const commissionSummary = (rates: Record<ListingKind, number>) =>
+  (['hotel', 'homestay', 'tour', 'car'] as const).map((kind) => `${kind}s ${rates[kind]}%`).join(', ');
+export type StaffRole = 'admin' | 'operations_manager' | 'finance_manager' | 'support_agent';
+export type AuditEntry = { id: string; action: string; resourceType: string; resourceId?: string; actor: string; ipAddress?: string; userAgent?: string; at: string };
 export interface PlatformSettings {
-  commissionPercent: number;
+  /** GBBookings' commission per listing type, on the price excluding taxes and the service fee. */
+  commissionPercents: Record<ListingKind, number>;
+  /** Paid by the guest on top of the price, kept by GBBookings. */
+  serviceFeePercent: number;
   refundTiers: Array<{ withinHours: number; refundPercent: number }>;
   laterRefundPercent: number;
   taxes: Array<{ name: string; percent: number }>;
@@ -945,12 +982,12 @@ export const api = {
 
   /** GBBookings' current commission percent (public, for the Become a partner page). */
   getCommission() {
-    return request<{ data: { commissionPercent: number } }>('/api/v1/settings/commission').then((result) => result.data.commissionPercent);
+    return request<{ data: Pick<PlatformSettings, 'commissionPercents' | 'serviceFeePercent'> }>('/api/v1/settings/commission').then((result) => result.data);
   },
 
   /** The admin-set refund rules for guests cancelling a paid booking (public). */
   getRefundRules() {
-    return request<{ data: Omit<PlatformSettings, 'commissionPercent'> }>('/api/v1/settings/refunds').then((result) => result.data);
+    return request<{ data: Pick<PlatformSettings, 'refundTiers' | 'laterRefundPercent'> }>('/api/v1/settings/refunds').then((result) => result.data);
   },
 
   /** Opens Safepay's payment page for an unpaid Pay now booking; returns where to send the guest. */
@@ -1090,7 +1127,13 @@ export const api = {
     moderateReview(reviewId: string, action: 'hide' | 'restore' | 'dismiss', reason: string) {
       return request<{ data: Review }>(`/api/v1/admin/reviews/${encodeURIComponent(reviewId)}/moderate`, { method: 'POST', body: JSON.stringify({ action, reason }) }).then((result) => result.data);
     },
-    createStaff(input: { name: string; email: string; role: 'admin' }) {
+    listAudit(params: { kind?: 'activity' | 'security'; mine?: '1'; page?: number } = {}) {
+      return request<Paginated<AuditEntry>>(`/api/v1/admin/audit${queryString(params)}`);
+    },
+    getPermissions() {
+      return request<{ data: { roles: Record<string, string[]>; descriptions: Record<string, string> } }>('/api/v1/admin/users/permissions').then((result) => result.data);
+    },
+    createStaff(input: { name: string; email: string; role: StaffRole | 'custom_staff'; customRoleId?: string }) {
       return request<{ data: AdminUser; invitationSent: boolean }>('/api/v1/admin/users', {
         method: 'POST', body: JSON.stringify(input),
       });
@@ -1187,6 +1230,57 @@ export const api = {
     saveSettings(settings: PlatformSettings) {
       return request<{ data: PlatformSettings }>('/api/v1/admin/settings', { method: 'PUT', body: JSON.stringify(settings) }).then((result) => result.data);
     },
+  },
+
+  /** Staff console pages beyond the admin core. The server checks each call's permission. */
+  console: {
+    report: (from: string, to: string) => data<PlatformReport>(`/api/v1/console/reports${queryString({ from, to })}`),
+    notifications: () => data<Array<{ page: string; text: string; count: number }>>('/api/v1/console/notifications'),
+    customers: (params: { search?: string; page?: number }) => request<Paginated<CustomerRecord>>(`/api/v1/console/customers${queryString(params)}`),
+    paymentRequests: (status?: string) => data<PaymentRequest[]>(`/api/v1/console/payment-requests${queryString({ status })}`),
+    fraudCases: () => data<FraudCase[]>('/api/v1/console/fraud'),
+    fraudScan: () => data<{ found: number }>('/api/v1/console/fraud/scan', { method: 'POST' }),
+    fraudDecide: (id: string, status: 'under_review' | 'cleared' | 'confirmed', note: string) => request<void>(`/api/v1/console/fraud/${id}`, { method: 'POST', body: JSON.stringify({ status, note }) }),
+    staffDirectory: () => data<Array<{ id: string; name: string; roles: string[] }>>('/api/v1/console/staff-directory'),
+    tasks: (scope: 'mine' | 'all', status: 'open' | 'done') => data<StaffTask[]>(`/api/v1/console/tasks${queryString({ scope, status })}`),
+    createTask: (input: { title: string; note?: string; assigneeId: string; dueDate?: string }) => request<unknown>('/api/v1/console/tasks', { method: 'POST', body: JSON.stringify(input) }),
+    taskAction: (id: string, action: 'done' | 'reopen') => request<void>(`/api/v1/console/tasks/${id}/${action}`, { method: 'POST' }),
+    securityCenter: () => data<StaffSecurity[]>('/api/v1/console/security-center'),
+    securityAction: (id: string, action: 'sign-out' | 'unlock') => request<void>(`/api/v1/console/security-center/${id}/${action}`, { method: 'POST' }),
+    automations: () => data<Array<{ name: string; schedule: string; description: string }>>('/api/v1/console/automations'),
+    channelFeeds: () => data<Array<{ listing: string; room: string; channel: string; lastSyncAt?: string; error?: string; conflicts: number }>>('/api/v1/console/channel-feeds'),
+    media: (params: { kind?: string; page?: number }) => request<Paginated<MediaItem & { partner?: string }>>(`/api/v1/console/media${queryString(params)}`),
+    destinations: () => data<Array<{ name: string; total: number; hotel: number; homestay: number; car: number; tour: number }>>('/api/v1/console/destinations'),
+    guides: () => data<Array<{ id: string; name: string; email: string; phone?: string; status: string; city?: string; kind: string; licence: boolean; tours: number; liveTours: number }>>('/api/v1/console/guides'),
+    subscribers: () => data<Array<{ email: string; source: string; subscribedAt: string }>>('/api/v1/console/subscribers'),
+    customRoles: () => data<CustomRole[]>('/api/v1/console/custom-roles'),
+    saveCustomRole: (role: Omit<CustomRole, 'id' | 'users'>, id?: string) => request<unknown>(`/api/v1/console/custom-roles${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body: JSON.stringify(role) }),
+    aiControl: () => data<Array<{ feature: string; label: string; requests: number; tokens: number; errorRate: number; enabled: boolean }>>('/api/v1/console/ai/control'),
+    setAiFeature: (feature: string, enabled: boolean) => request<void>('/api/v1/console/ai/control', { method: 'POST', body: JSON.stringify({ feature, enabled }) }),
+    forecast: () => data<{ basis: string; weeks: Array<{ weekOf: string; bookedCount: number; bookedValue: number; bookedCommission: number; projectedCount: number; projectedValue: number; projectedCommission: number }> }>('/api/v1/console/ai/forecast'),
+    aiSupportReply: (caseId: string) => data<{ reply: string }>('/api/v1/console/ai/support', { method: 'POST', body: JSON.stringify({ caseId }) }),
+    aiVendor: (vendorId: string) => data<{ summary: string; risks: string[]; actions: string[] }>('/api/v1/console/ai/vendor', { method: 'POST', body: JSON.stringify({ vendorId }) }),
+  },
+
+  /** AI suggestions for partners and listing staff. Nothing is applied automatically. */
+  aiTools: {
+    pricing: (listingId: string) => data<Array<{ title: string; reason: string }>>('/api/v1/ai-tools/pricing', { method: 'POST', body: JSON.stringify({ listingId }) }),
+    content: (listingId: string) => data<{ title: string; seoTitle: string; description: string }>('/api/v1/ai-tools/content', { method: 'POST', body: JSON.stringify({ listingId }) }),
+    reviews: (listingId: string) => data<{ summary: string; praise: string[]; complaints: string[] }>('/api/v1/ai-tools/reviews', { method: 'POST', body: JSON.stringify({ listingId }) }),
+    assistant: (messages: Array<{ role: 'user' | 'assistant'; text: string }>) => data<{ reply: string }>('/api/v1/ai-tools/assistant', { method: 'POST', body: JSON.stringify({ messages }) }),
+  },
+
+  partnerConsole: {
+    paymentRequests: (status?: string) => data<PaymentRequest[]>(`/api/v1/vendor/console/payment-requests${queryString({ status })}`),
+    createPaymentRequest: (input: { bookingReference: string; type: PaymentRequest['type']; amount: number; dueDate: string; note?: string; send: boolean }) =>
+      data<PaymentRequest>('/api/v1/vendor/console/payment-requests', { method: 'POST', body: JSON.stringify(input) }),
+    paymentRequestAction: (id: string, action: 'send' | 'paid' | 'cancel') => data<PaymentRequest>(`/api/v1/vendor/console/payment-requests/${id}/${action}`, { method: 'POST' }),
+    documents: (kind?: 'image' | 'document') => data<MediaItem[]>(`/api/v1/vendor/console/documents${queryString({ kind })}`),
+  },
+
+  guestConsole: {
+    payments: () => data<GuestPayments>('/api/v1/me/payments'),
+    loyalty: () => data<{ points: number; tier: string; trips: number; lifetimeValue: number; referralCode: string; nextTier?: string; toNextTier?: number }>('/api/v1/me/loyalty'),
   },
 
   getWishlist() {

@@ -33,7 +33,7 @@ export function RefundsPanel() {
   };
   const markSent = async (refund: AdminRefund) => {
     const note = (await askReason({
-      title: `Mark ${pkr(refund.amount)} as sent?`, confirmLabel: 'Mark sent', noteLabel: refund.channel === 'partner' ? 'How the partner returned it' : 'Safepay refund reference',
+      title: `Mark ${pkr(refund.amount)} as sent?`, confirmLabel: 'Mark sent', noteLabel: refund.channel === 'partner' ? 'How the partner returned it' : 'payment provider refund reference',
       description: `${refund.guestName} · ${refund.reference}. The guest is emailed that the refund is on its way. Only do this once the money has really moved.`,
     }))?.trim();
     if (note) await act(refund, () => api.admin.markRefundSent(refund, note));
@@ -42,7 +42,7 @@ export function RefundsPanel() {
   return (
     <section className="space-y-4">
       {dialog}
-      {!auto && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Automatic Safepay refunds are off (SAFEPAY_AUTO_REFUNDS). Refund each one in the Safepay dashboard, then mark it sent here.</p>}
+      {!auto && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Automatic refunds are off (SAFEPAY_AUTO_REFUNDS). Refund each one in the payment provider dashboard, then mark it sent here.</p>}
       <div className="flex gap-2" role="tablist" aria-label="Refund status">
         {(['open', 'sent'] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={filter === value} onClick={() => setFilter(value)} className={`min-h-10 rounded-full border px-4 text-sm font-bold ${filter === value ? 'border-[#17211B] bg-[#17211B] text-white' : 'border-[#D9DED8] bg-white text-[#3D4A42]'}`}>{value === 'open' ? 'To do' : 'Sent'}</button>)}
       </div>
@@ -54,12 +54,12 @@ export function RefundsPanel() {
               <span><strong>{pkr(refund.amount)}</strong> · {refund.guestName} <span className="text-slate-500">({refund.guestEmail})</span></span>
               <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS[refund.status][1]}`}>{STATUS[refund.status][0]}</span>
             </div>
-            <p className="text-slate-500"><span className="font-mono text-xs">{refund.reference}</span> · {refund.listingTitle} · {KIND[refund.kind] ?? refund.kind} · {refund.channel === 'safepay' ? 'Back through Safepay' : 'Partner holds this money'} · {formatDateForDisplay(refund.sentAt ?? refund.createdAt)}</p>
+            <p className="text-slate-500"><span className="font-mono text-xs">{refund.reference}</span> · {refund.listingTitle} · {KIND[refund.kind] ?? refund.kind} · {refund.channel === 'safepay' ? 'Back through payment provider' : 'Partner holds this money'} · {formatDateForDisplay(refund.sentAt ?? refund.createdAt)}</p>
             {refund.lastError && <p className="text-rose-700">{refund.lastError}</p>}
-            {refund.status === 'sending' && <p className="text-rose-700">The last attempt never reported back. Check the Safepay dashboard before doing anything else.</p>}
+            {refund.status === 'sending' && <p className="text-rose-700">The last attempt never reported back. Check the payment provider dashboard before doing anything else.</p>}
             {refund.note && <p className="text-slate-600">Note: {refund.note}</p>}
             {filter === 'open' && <div className="flex flex-wrap gap-2 pt-1">
-              {auto && refund.channel === 'safepay' && ['pending', 'failed'].includes(refund.status) && <button type="button" disabled={busy === refund.id} onClick={() => act(refund, () => api.admin.retryRefund(refund))} className={primary}>Send through Safepay</button>}
+              {auto && refund.channel === 'safepay' && ['pending', 'failed'].includes(refund.status) && <button type="button" disabled={busy === refund.id} onClick={() => act(refund, () => api.admin.retryRefund(refund))} className={primary}>Send refund</button>}
               <button type="button" disabled={busy === refund.id} onClick={() => void markSent(refund)} className={button}>Mark as sent</button>
             </div>}
           </li>
@@ -138,7 +138,7 @@ export function PayoutsPanel() {
         {totals && <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           {([['Collected online', totals.collectedOnline], ['Refunds sent', totals.refundsSent], ['Refunds still owed (all time)', totals.refundsOutstanding], ['Paid to partners', totals.paidToPartners], ['Received from partners', totals.receivedFromPartners], ['Commission on settled statements', totals.commissionSettled]] as const).map(([term, value]) => <div key={term}><dt className="text-slate-500">{term}</dt><dd className="font-semibold">{pkr(value)}</dd></div>)}
         </dl>}
-        {totals && <p className="rounded-lg bg-slate-50 p-3 text-sm"><strong>Should have stayed with GBBookings over this period: {pkr(totals.expectedHeld)}.</strong> Compare it with the Safepay settlement report and the bank statement for the same dates. A difference means a payment, refund or transfer was recorded here but not there, or the other way round.</p>}
+        {totals && <p className="rounded-lg bg-slate-50 p-3 text-sm"><strong>Should have stayed with GBBookings over this period: {pkr(totals.expectedHeld)}.</strong> Compare it with the payment provider payouts report and the bank statement for the same dates. A difference means a payment, refund or transfer was recorded here but not there, or the other way round.</p>}
       </section>
     </div>
   );

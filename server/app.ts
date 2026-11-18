@@ -18,6 +18,8 @@ import { adminBookingRouter, availabilityHandlers, unavailableDatesHandlers, boo
 import { adminUserRouter } from './modules/users/user-admin.routes.js';
 import { wishlistRouter } from './modules/wishlist/wishlist.routes.js';
 import { adminSettingsRouter, publicSettingsRouter } from './modules/settings/settings.routes.js';
+import { adminAuditRouter } from './modules/audit/audit.routes.js';
+import { aiToolsRouter, consoleRouter, guestConsoleRouter, partnerConsoleRouter } from './modules/console/console.routes.js';
 import { messageRouter } from './modules/messages/message.routes.js';
 import { adminSupportRouter } from './modules/support/support.routes.js';
 import { newsletterRouter } from './modules/newsletter/newsletter.routes.js';
@@ -117,6 +119,11 @@ export function createApp(): Express {
   app.use('/api/v1/admin/bookings', adminBookingRouter);
   app.use('/api/v1/admin/support', adminSupportRouter);
   app.use('/api/v1/admin/settings', adminSettingsRouter);
+  app.use('/api/v1/admin/audit', adminAuditRouter);
+  app.use('/api/v1/console', consoleRouter);
+  app.use('/api/v1/ai-tools', aiToolsRouter);
+  app.use('/api/v1/vendor/console', partnerConsoleRouter);
+  app.use('/api/v1/me', guestConsoleRouter);
   app.use('/api/v1/admin/finance', adminFinanceRouter);
   app.use('/api/v1/vendor/finance', partnerFinanceRouter);
   app.use('/api/v1/settings', publicSettingsRouter);

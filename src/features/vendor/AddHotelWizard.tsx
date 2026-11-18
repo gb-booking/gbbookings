@@ -650,7 +650,7 @@ export default function AddHotelWizard({
         {id === "payments" && (
           <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 p-4"><p className="text-sm font-bold">Pay now, online</p><p className="mt-1 text-xs leading-5 text-slate-500">Guests pay by card or mobile wallet through Safepay when they book. GBBookings handles the payment and refunds, and pays you out.</p></div>
+              <div className="rounded-xl border border-slate-200 p-4"><p className="text-sm font-bold">Pay now, online <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Coming soon</span></p><p className="mt-1 text-xs leading-5 text-slate-500">Guests pay by card through Safepay when they book. GBBookings handles the payment and refunds, and pays you out.</p></div>
               <div className="rounded-xl border border-slate-200 p-4"><p className="text-sm font-bold">Pay on arrival</p><p className="mt-1 text-xs leading-5 text-slate-500">Guests pay you at the property. Choose below how they can pay there.</p></div>
             </div>
             <PaymentMethodsField value={stayInfo} onChange={setStayInfo} />
@@ -694,7 +694,7 @@ export default function AddHotelWizard({
         {id === "rooms" && (
           <div className="space-y-3">
             {rooms.map((room, index) => editing === index ? (
-              <RoomForm key={index} initial={{ ...room.input, photos: room.photos }} singleUnit={singleUnit} live={false} busy={false} submitLabel="Save" onCancel={() => setEditing(null)}
+              <RoomForm key={index} initial={{ ...room.input, photos: room.photos }} kind={homestay ? 'homestay' : 'hotel'} singleUnit={singleUnit} live={false} busy={false} submitLabel="Save" onCancel={() => setEditing(null)}
                 onSubmit={(input, roomPhotos) => { setRooms(rooms.map((item, at) => (at === index ? { input, photos: roomPhotos } : item))); setEditing(null); }} />
             ) : (
               <article key={index} className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4">
@@ -714,7 +714,7 @@ export default function AddHotelWizard({
               </article>
             ))}
             {editing === "new" ? (
-              <RoomForm initial={singleUnit ? entireHome : newRoom} singleUnit={singleUnit} live={false} busy={false} submitLabel={singleUnit ? "Save" : "Add this room"} onCancel={() => setEditing(null)}
+              <RoomForm initial={singleUnit ? entireHome : newRoom} kind={homestay ? 'homestay' : 'hotel'} singleUnit={singleUnit} live={false} busy={false} submitLabel={singleUnit ? "Save" : "Add this room"} onCancel={() => setEditing(null)}
                 onSubmit={(input, roomPhotos) => { setRooms([...rooms, { input, photos: roomPhotos }]); setEditing(null); setError(""); }} />
             ) : !(singleUnit && rooms.length) && (
               <button type="button" className={`${secondaryButton} w-full border-dashed`} onClick={() => setEditing("new")}>

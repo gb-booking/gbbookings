@@ -11,7 +11,7 @@ import CalendarSyncPanel from './CalendarSyncPanel';
 import RoomManager, { secondaryButton } from './RoomManager';
 import VendorReservations from './VendorReservations';
 
-type HotelTab = 'rooms' | 'details' | 'policies' | 'availability' | 'reservations';
+export type HotelTab = 'rooms' | 'details' | 'policies' | 'availability' | 'reservations';
 
 export const LISTING_STATUS: Record<VendorListing['status'], [string, string]> = {
   draft: ['Draft', 'bg-slate-100 text-slate-700'],
@@ -73,11 +73,11 @@ function AvailabilityTab({ listing }: { listing: VendorListing }) {
   );
 }
 
-export default function HotelWorkspace({ listing, onBack, onChange, onAvailability, busy }: {
+export default function HotelWorkspace({ listing, onBack, onChange, onAvailability, busy, initialTab = 'rooms' }: {
   listing: VendorListing; onBack: () => void; onChange: (listing: VendorListing, message?: string) => void;
-  onAvailability: (listing: VendorListing, action: 'pause' | 'resume') => void; busy: boolean;
+  onAvailability: (listing: VendorListing, action: 'pause' | 'resume') => void; busy: boolean; initialTab?: HotelTab;
 }) {
-  const [tab, setTab] = useState<HotelTab>('rooms');
+  const [tab, setTab] = useState<HotelTab>(initialTab);
   const [status, tone] = LISTING_STATUS[listing.status];
   const car = listing.type === 'car';
   const tour = listing.type === 'tour';

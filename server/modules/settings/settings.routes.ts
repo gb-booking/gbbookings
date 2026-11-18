@@ -28,8 +28,9 @@ publicSettingsRouter.get('/refunds', asyncHandler(async (_request, response) => 
   response.json({ data: { refundTiers, laterRefundPercent } });
 }));
 
-/** GBBookings' current commission, shown to businesses on the Become a partner page. */
+/** GBBookings' current commission per listing type and the guest service fee, shown to businesses and on the partner agreement. */
 publicSettingsRouter.get('/commission', asyncHandler(async (_request, response) => {
   await requireSettingsDatabase();
-  response.json({ data: { commissionPercent: (await getPlatformSettings()).commissionPercent } });
+  const { commissionPercents, serviceFeePercent } = await getPlatformSettings();
+  response.json({ data: { commissionPercents, serviceFeePercent } });
 }));

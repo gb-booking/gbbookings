@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from '../../shared/components/Toaster';
 import { ArrowRight, BadgeCheck, CalendarDays, CheckCircle2, Clock, CreditCard, LoaderCircle } from 'lucide-react';
-import { api, ApiError, type VendorProfile } from '../../shared/api/api';
+import { api, ApiError, commissionSummary, type ListingKind, type VendorProfile } from '../../shared/api/api';
 import { formatDateForDisplay } from '../../shared/utils/date';
 import HotelRegistration, { businessTypeOf, type PartnerKind } from './HotelRegistration';
 import AddHotelWizard from '../vendor/AddHotelWizard';
@@ -55,10 +55,10 @@ export default function BecomePartner({ isLoggedIn, isPartner, onSignIn, onOpenD
   const [drafting, setDrafting] = useState<PartnerKind | null>(null);
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [commission, setCommission] = useState<number | null>(null);
+  const [commission, setCommission] = useState<Record<ListingKind, number> | null>(null);
   const [hasListing, setHasListing] = useState(false);
 
-  useEffect(() => { api.getCommission().then(setCommission).catch(() => undefined); }, []);
+  useEffect(() => { api.getCommission().then((rates) => setCommission(rates.commissionPercents)).catch(() => undefined); }, []);
 
   useEffect(() => {
     if (!isLoggedIn) { setVendor(null); setLoading(false); return undefined; }
@@ -153,8 +153,9 @@ export default function BecomePartner({ isLoggedIn, isPartner, onSignIn, onOpenD
 
       <section aria-label="Why partner with us" className="mt-16 grid gap-5 md:grid-cols-3">
         <div className={`${card} p-7`}>
-          <p className="text-4xl font-extrabold text-[#006F3C]">{commission === null ? '—' : `${commission}%`}</p>
+          <p className="text-4xl font-extrabold text-[#006F3C]">{commission === null ? '—' : `${Math.min(...Object.values(commission))}–${Math.max(...Object.values(commission))}%`}</p>
           <h3 className="mt-2 text-lg font-bold text-slate-950">Commission per booking</h3>
+          {commission && <p className="mt-1 text-sm capitalize text-slate-600">{commissionSummary(commission)}</p>}
           <p className="mt-1 text-sm leading-6 text-slate-600">No sign-up fee and no monthly fee. You only pay when a guest books.</p>
         </div>
         <div className={`${card} p-7`}>

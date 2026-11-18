@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api } from '../../shared/api/api';
+import { api, commissionSummary } from '../../shared/api/api';
 import { CANCELLATION_POLICIES, CANCELLATION_POLICY_KEYS, policyLines } from '../../shared/utils/cancellation';
 import { PARTNER_AGREEMENT_VERSION } from '../../shared/utils/partner-agreement';
 
@@ -60,13 +60,13 @@ function RefundPolicy() {
 }
 
 function PartnerAgreement() {
-  const [commission, setCommission] = useState<number | null>(null);
-  useEffect(() => { api.getCommission().then(setCommission).catch(() => undefined); }, []);
+  const [commission, setCommission] = useState<string | null>(null);
+  useEffect(() => { api.getCommission().then((rates) => setCommission(commissionSummary(rates.commissionPercents))).catch(() => undefined); }, []);
   return <>
     <p>Version {PARTNER_AGREEMENT_VERSION}. This agreement is between GBBookings and the business or person listing on GBBookings (the partner).</p>
     <Section title="Listing"><p>You must be entitled to offer what you list. Keep your listings, prices, availability, fees and policies correct. GBBookings reviews partners and listings and can refuse, pause or remove them. Do not put contact details in listings or messages, or ask guests to book or pay outside GBBookings.</p></Section>
     <Section title="Honouring bookings"><p>Provide what was booked at the price shown. Answer booking requests within the time shown; unanswered requests expire. Guests pay under the cancellation policy on the listing when they booked. If you cancel a paid booking, the guest is refunded in full.</p></Section>
-    <Section title="Commission"><p>You pay GBBookings a commission of {commission === null ? 'the percent shown on the Become a partner page' : `${commission}%`} of each booking, excluding taxes. Each booking keeps the percent in force when it was made. GBBookings can change the percent for future bookings by updating this agreement. On a cancelled paid booking, commission applies only to what you keep.</p></Section>
+    <Section title="Commission"><p>You pay GBBookings a commission on each booking, set per kind of listing ({commission === null ? 'shown on the Become a partner page' : commission}), on the price excluding taxes and the guest service fee. The guest service fee is paid by the guest and kept by GBBookings. Each booking keeps the percent in force when it was made. GBBookings can change the percent for future bookings by updating this agreement. On a cancelled paid booking, commission applies only to what you keep.</p></Section>
     <Section title="Payments and statements"><p>Pay now money is collected by GBBookings. Pay on arrival money is collected by you. GBBookings issues statements showing, booking by booking, what was collected, refunded and charged in commission. It pays what it owes to the bank account in your business profile. You pay any commission a statement shows you owe within 14 days of the statement. Bookings with an open refund wait until that refund is sent.</p></Section>
     <Section title="Refunds"><p>GBBookings returns Pay now refunds to guests. If you collected the money on arrival and a refund is due, you return it to the guest promptly.</p></Section>
     <Section title="Taxes"><p>You are responsible for your own taxes and licences, including remitting any taxes shown on your bookings.</p></Section>

@@ -3,7 +3,7 @@ import { BadgeCheck, CreditCard, Headset, MapPin } from 'lucide-react';
 const POINTS = [
   { icon: MapPin, title: 'Local by design', text: 'We only list Gilgit-Baltistan: hotels, family homestays, cars and jeeps with or without a driver, and guided tours, run by people who live there.' },
   { icon: BadgeCheck, title: 'Every partner is checked', text: 'Partners send their business or CNIC documents, and each listing is reviewed by our team before guests can book it.' },
-  { icon: CreditCard, title: 'Pay the way that suits you', text: 'Pay now by card or wallet through Safepay and get an instant confirmation, or send a request and pay the partner on arrival. Prices are in PKR, with every fee shown before you book.' },
+  { icon: CreditCard, title: 'Pay the way that suits you', text: 'Pay the partner on arrival, with nothing to pay when you book. Pay now online is coming soon. Prices are in PKR, with every fee shown before you book.' },
   { icon: Headset, title: 'Help when the road closes', text: 'Mountain roads close for snow, landslides and official orders. Contact us about any booking and we help you change or cancel it with the partner.' },
 ];
 
@@ -32,7 +32,7 @@ export default function AboutPage({ onNavigate }: { onNavigate: (view: string) =
 
       <section aria-labelledby="how-we-earn" className="space-y-2 text-sm leading-7 text-slate-600">
         <h2 id="how-we-earn" className="text-xl font-bold text-slate-950">How we earn</h2>
-        <p>Partners pay GBBookings a commission on each completed booking. We don't add a booking fee of our own: any partner fees and taxes are shown as their own lines before you book. Listings marked Featured are shown first in Recommended order, and you can sort by price or rating instead.</p>
+        <p>Partners pay GBBookings a commission on each completed booking. Guests pay a small GBBookings service fee on each booking. It is shown as its own line before you book, alongside any partner fees and taxes. Listings marked Featured are shown first in Recommended order, and you can sort by price or rating instead.</p>
       </section>
 
       <section className="flex flex-col gap-3 rounded-xl bg-[#006F3C] p-6 text-white sm:flex-row sm:items-center sm:justify-between">

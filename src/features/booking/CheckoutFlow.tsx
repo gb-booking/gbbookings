@@ -214,16 +214,16 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
                   <div className="flex gap-2"><input id="checkout-promo" value={promo} onChange={(event) => setPromo(event.target.value.toUpperCase())} maxLength={20} autoComplete="off" placeholder="e.g. SUMMER10" className={inputClass.replace('mt-1.5 ', '') + ' uppercase'} aria-invalid={Boolean(promoError)} aria-describedby={promoError ? 'checkout-promo-error' : undefined} /><button disabled={busy || !promo.trim()} className="min-h-11 shrink-0 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Apply</button></div>
                   {promoError && <p id="checkout-promo-error" role="alert" className="text-sm text-rose-700">{promoError}</p>}
                 </form>}
-            {onlineAvailable && <fieldset className="space-y-2">
+            <fieldset className="space-y-2">
               <legend className="text-sm font-semibold text-slate-800">How would you like to pay?</legend>
               {nonRefundable && <p className="rounded-lg bg-sky-50 p-3 text-sm text-sky-900">You chose the non-refundable rate: it is paid now and can't be refunded.</p>}
-              {([[true, 'Pay now', 'Card or mobile wallet on Safepay’s secure page. Confirmed instantly.'], ...(nonRefundable ? [] : [[false, 'Pay on arrival', `Pay ${payWhere}. ${instant ? 'Confirmed right away.' : 'The partner confirms your request within a day.'}`]] as const)] as const).map(([value, title, hint]) => (
-                <label key={title} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${payNow === value ? 'border-[#006F3C] bg-emerald-50/50' : 'border-slate-200'}`}>
-                  <input type="radio" name="payment" checked={payNow === value} onChange={() => setPayNow(value)} className="mt-1 accent-[#006F3C]" />
+              {([[true, 'Pay now', onlineAvailable ? 'By card on Safepay’s secure page. Confirmed instantly.' : 'Coming soon. Pay online by card or mobile wallet.'], ...(nonRefundable ? [] : [[false, 'Pay on arrival', `Pay ${payWhere}. ${instant ? 'Confirmed right away.' : 'The partner confirms your request within a day.'}`]] as const)] as const).map(([value, title, hint]) => (
+                <label key={title} className={`flex items-start gap-3 rounded-xl border p-4 ${value && !onlineAvailable ? 'cursor-not-allowed border-slate-200 opacity-60' : 'cursor-pointer'} ${payNow === value ? 'border-[#006F3C] bg-emerald-50/50' : 'border-slate-200'}`}>
+                  <input type="radio" name="payment" checked={payNow === value} disabled={value && !onlineAvailable} onChange={() => setPayNow(value)} className="mt-1 accent-[#006F3C]" />
                   <span><span className="block font-semibold text-slate-900">{title}</span><span className="block text-sm text-slate-500">{hint}</span></span>
                 </label>
               ))}
-            </fieldset>}
+            </fieldset>
             <ol className="space-y-3 text-sm text-slate-700">
               {(payNow
                 ? [`You pay PKR ${quote.toLocaleString()} now on Safepay’s secure page.`, 'Your booking is confirmed as soon as the payment goes through, and we email you.', `If you cancel: ${policyLines(policy).join('; ')}.`]

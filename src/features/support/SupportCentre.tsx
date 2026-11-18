@@ -7,7 +7,7 @@ const SUPPORT_WHATSAPP = import.meta.env.VITE_SUPPORT_WHATSAPP as string | undef
 const SUPPORT_EMAIL = 'info@gbbookings.com';
 
 const FAQS: Array<[string, string]> = [
-  ['How do I pay?', 'Pay on arrival: you pay the property, car partner or tour partner directly at check-in, at pickup, or when the tour starts. Each listing shows the ways they accept (cash, card, JazzCash, Easypaisa or bank transfer). Or choose Pay now at checkout to pay online by card or mobile wallet on Safepay\'s secure page.'],
+  ['How do I pay?', 'Pay on arrival: you pay the property, car partner or tour partner directly at check-in, at pickup, or when the tour starts. Each listing shows the ways they accept (cash, card, JazzCash, Easypaisa or bank transfer). Pay now online, by card or mobile wallet, is coming soon.'],
   ['When is my booking confirmed?', 'After you book, the partner has 24 hours to confirm. You get an email either way. If they do not answer in time, the request is cancelled and nothing is held.'],
   ['How do I cancel?', 'Go to My Bookings and cancel any time before the check-in, pickup or tour start date. On or after that day, contact the partner directly. Their phone and WhatsApp are on your voucher once they confirm.'],
   ['Can I change my dates?', 'Open the booking in My Bookings and press Request a change. You see the new price first, and the partner accepts or declines. If a partner suggests a change, nothing happens unless you accept it.'],

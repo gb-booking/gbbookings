@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { CalendarDays, Image as ImageIcon, LoaderCircle, Minus, Plus } from 'lucide-react';
-import { api, type RoomCalendar as Calendar, type RoomSeason, type VendorListing, type VendorRoom, type VendorRoomInput } from '../../shared/api/api';
+import { api, type ListingKind, type RoomCalendar as Calendar, type RoomSeason, type VendorListing, type VendorRoom, type VendorRoomInput } from '../../shared/api/api';
 import { useReasonDialog } from '../../shared/components/ReasonDialog';
 import PhotoManager, { toPhotoInput, type EditablePhoto } from './PhotoManager';
 import RoomCalendar from './RoomCalendar';
@@ -39,14 +39,14 @@ const singleUnitWords = (listing: VendorListing) => listing.type === 'tour' ? {
   formCount: 'Number of identical cars',
 } : undefined;
 
-// The admin-set commission, fetched once per page load, for the "you earn" line under prices.
-let commissionRequest: Promise<number> | undefined;
-export function useCommission() {
+// The admin-set commission for this kind of listing, fetched once per page load, for the "you earn" line under prices.
+let commissionRequest: Promise<Record<ListingKind, number>> | undefined;
+export function useCommission(kind: ListingKind) {
   const [percent, setPercent] = useState<number | null>(null);
   useEffect(() => {
-    commissionRequest ??= api.getCommission().catch(() => { commissionRequest = undefined; return Promise.reject(); });
-    commissionRequest.then(setPercent, () => undefined);
-  }, []);
+    commissionRequest ??= api.getCommission().then((rates) => rates.commissionPercents).catch(() => { commissionRequest = undefined; return Promise.reject(); });
+    commissionRequest.then((rates) => setPercent(rates[kind]), () => undefined);
+  }, [kind]);
   return percent;
 }
 
@@ -73,15 +73,15 @@ function BedRows({ label, beds, onChange }: { label: string; beds: Bed[]; onChan
 }
 
 /** Add/edit form. On a live hotel, price and room count apply at once; the rest is reviewed before guests see it. */
-export function RoomForm({ initial, live, busy, submitLabel, onSubmit, onCancel, singleUnit = false }: {
-  initial: Omit<VendorRoomInput, 'photos'> & { photos?: EditablePhoto[] }; live: boolean; busy: boolean; submitLabel: string; singleUnit?: boolean;
+export function RoomForm({ initial, live, busy, submitLabel, onSubmit, onCancel, singleUnit = false, kind = 'hotel' }: {
+  initial: Omit<VendorRoomInput, 'photos'> & { photos?: EditablePhoto[] }; live: boolean; busy: boolean; submitLabel: string; singleUnit?: boolean; kind?: 'hotel' | 'homestay';
   onSubmit: (input: VendorRoomInput, photos: EditablePhoto[]) => void; onCancel?: () => void;
 }) {
   const [room, setRoom] = useState(initial);
   const [photos, setPhotos] = useState<EditablePhoto[]>(initial.photos ?? []);
   const [uploading, setUploading] = useState(false);
   const [problem, setProblem] = useState('');
-  const commission = useCommission();
+  const commission = useCommission(kind);
   // Rooms saved before beds were structured keep their text until the partner adds beds.
   const legacyBeds = !initial.beds?.length && !initial.bedrooms?.length ? initial.bedType : '';
   const number = (key: 'maxAdults' | 'maxChildren' | 'totalRooms' | 'basePrice') => ({
@@ -265,7 +265,7 @@ function RoomCard({ listing, room, live, editable, busy, onRun, onReplace, onRem
   const toggle = () => onRun(async () => onReplace(await api.updateHotelRoom(listing.id, room.id, { status: room.status === 'paused' ? 'active' : 'paused' })));
 
   if (editing) {
-    return <RoomForm initial={{ ...shown, photos: shown.photos }} singleUnit={isEntireHome(listing)} live={live} busy={busy} submitLabel="Save room" onCancel={() => setEditing(false)}
+    return <RoomForm initial={{ ...shown, photos: shown.photos }} kind={listing.type === 'homestay' ? 'homestay' : 'hotel'} singleUnit={isEntireHome(listing)} live={live} busy={busy} submitLabel="Save room" onCancel={() => setEditing(false)}
       onSubmit={(input) => onRun(async () => {
         const updated = await api.updateHotelRoom(listing.id, room.id, input);
         onReplace(updated); setPrice(updated.basePrice); setCount(updated.totalRooms); setEditing(false); onEdited();
@@ -489,7 +489,7 @@ export default function RoomManager({ listing, onListingChange }: { listing: Ven
           setAdding(false);
           await refreshListing();
         })} />}
-      {adding && !car && <RoomForm initial={singleUnit ? entireHome : newRoom} singleUnit={singleUnit} live={live} busy={busy} submitLabel={singleUnit ? 'Save' : 'Add room'} onCancel={() => setAdding(false)}
+      {adding && !car && <RoomForm initial={singleUnit ? entireHome : newRoom} kind={listing.type === 'homestay' ? 'homestay' : 'hotel'} singleUnit={singleUnit} live={live} busy={busy} submitLabel={singleUnit ? 'Save' : 'Add room'} onCancel={() => setAdding(false)}
         onSubmit={(input) => run(async () => {
           const created = await api.addHotelRoom(listing.id, { ...emptyRoom, ...input });
           setRooms((items) => [...items, created.data]);

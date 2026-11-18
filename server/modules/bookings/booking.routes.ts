@@ -1,3 +1,4 @@
+import { trackersIn } from '../payments/safepay.js';
 import { Router, type RequestHandler } from 'express';
 import { authenticate, authorizePermission } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
@@ -43,7 +44,7 @@ import {
   getListingAvailability,
   getUnavailableDates,
   updateBookingDetails,
-  handleSafepayWebhook,
+  recheckPaymentTrackers,
   listCustomerBookings,
   startOnlinePayment,
   verifyOnlinePayment,
@@ -56,7 +57,7 @@ import {
   withVendorActions,
 } from './booking.service.js';
 
-const actor = (request: Parameters<RequestHandler>[0]) => ({ userId: request.auth!.userId, roles: request.auth!.roles });
+const actor = (request: Parameters<RequestHandler>[0]) => ({ userId: request.auth!.userId, roles: request.auth!.roles, extraPermissions: request.auth!.extraPermissions });
 
 export const availabilityHandlers: RequestHandler[] = [
   validate('params', listingIdParamsSchema),
@@ -103,10 +104,10 @@ bookingRouter.post('/:id/payment/verify', validate('params', bookingIdParamsSche
   response.json({ data: await verifyOnlinePayment(actor(request), request.params.id) });
 }));
 
-/** Safepay calls this after payment events. No sign-in: the payment is always re-checked with Safepay. */
+/** Payment providers call these after payment events. No sign-in: the payment is always re-checked with the provider. */
 export const paymentWebhookRouter = Router();
 paymentWebhookRouter.post('/safepay/webhook', asyncHandler(async (request, response) => {
-  await handleSafepayWebhook(request.body);
+  await recheckPaymentTrackers(trackersIn(request.body));
   response.json({ received: true });
 }));
 
@@ -165,13 +166,16 @@ vendorBookingRouter.post('/:id/change-request', authorizePermission('booking:man
 }));
 
 export const adminBookingRouter = Router();
-adminBookingRouter.use(authenticate, authorizePermission('booking:manage'));
+// Support and finance staff can read; only booking managers can act.
+adminBookingRouter.use(authenticate, authorizePermission('booking:read'));
+adminBookingRouter.post('*', authorizePermission('booking:manage'));
 
 adminBookingRouter.get('/', validate('query', adminBookingsQuerySchema), asyncHandler(async (request, response) => {
   response.json(await listAdminBookings(request.query as any));
 }));
 
-adminBookingRouter.get('/export', validate('query', adminBookingFiltersSchema), asyncHandler(async (request, response) => {
+// The whole booking list with guest contact details: booking managers only.
+adminBookingRouter.get('/export', authorizePermission('booking:manage'), validate('query', adminBookingFiltersSchema), asyncHandler(async (request, response) => {
   const csv = await exportAdminBookings(actor(request), request.query as any, sessionMetadata(request));
   response.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="gbbookings-bookings-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' }).send(csv);
 }));

@@ -69,14 +69,17 @@ const bookingSchema = new Schema({
     totalMinor: { type: Number, required: true, min: 0 },
     // Partner fees and admin-set taxes, with their rates, so a change re-quotes this booking at the terms it was made under.
     charges: {
-      type: [new Schema({ name: String, type: { type: String, enum: ['fee', 'tax'] }, kind: { type: String, enum: ['percent', 'amount'] }, rate: Number, amountMinor: Number }, { _id: false })],
+      type: [new Schema({ name: String, type: { type: String, enum: ['fee', 'tax', 'service'] }, kind: { type: String, enum: ['percent', 'amount'] }, rate: Number, amountMinor: Number }, { _id: false })],
       default: undefined,
     },
     feesMinor: { type: Number, min: 0, default: 0 },
     taxesMinor: { type: Number, min: 0, default: 0 },
+    // GBBookings' service fee paid by the guest. Counted in commissionMinor, never paid out to the partner.
+    serviceMinor: { type: Number, min: 0, default: 0 },
     // A paid booking changed to cost more: the part the partner collects on arrival. Never reached GBBookings.
     balanceDueMinor: { type: Number, min: 0, default: 0 },
-    // GBBookings' commission: the admin-set percent at booking time, and the amount (re-worked on a change or cancellation).
+    // GBBookings' commission: the admin-set percent for the listing type at booking time, and GBBookings' whole take
+    // (commission plus service fee, re-worked on a change or cancellation).
     commissionPercent: { type: Number, min: 0, default: 0 },
     commissionMinor: { type: Number, min: 0, default: 0 },
   },

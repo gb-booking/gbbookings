@@ -11,7 +11,9 @@ const CHECKOUT_PAGE = { sandbox: 'https://sandbox.api.getsafepay.com/embedded/',
 /** A Safepay checkout token lasts an hour, so an unpaid "Pay now" booking holds its rooms that long. */
 export const ONLINE_HOLD_MINUTES = 60;
 
-export const onlinePaymentsEnabled = () => Boolean(env.SAFEPAY_API_KEY && env.SAFEPAY_SECRET_KEY);
+// The live site never takes sandbox payments: Pay now shows "Coming soon" there until SAFEPAY_ENV=production with live keys.
+export const onlinePaymentsEnabled = () => Boolean(env.SAFEPAY_API_KEY && env.SAFEPAY_SECRET_KEY)
+  && (env.NODE_ENV !== 'production' || env.SAFEPAY_ENV === 'production');
 
 async function call(path: string, body?: unknown) {
   const response = await fetch(`${API_HOST[env.SAFEPAY_ENV]}${path}`, {

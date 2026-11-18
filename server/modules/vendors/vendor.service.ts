@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { connectDatabase } from '../../database/connection.js';
 import { inTransaction } from '../../database/transaction.js';
 import { MediaModel } from '../../models/media.model.js';
-import { UserModel } from '../../models/user.model.js';
+import { UserModel, staffRoles, type UserRole } from '../../models/user.model.js';
 import { VendorMemberModel } from '../../models/vendor-member.model.js';
 import { VendorModel, type VendorRecord } from '../../models/vendor.model.js';
 import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
@@ -329,7 +329,7 @@ export async function addTeamMember(userId: string, input: { name: string; email
     let user = await UserModel.findOne({ email: input.email, deletedAt: null }).session(session);
     if (user) {
       if (user.status !== 'active') throw new AppError(409, 'USER_NOT_ACTIVE', 'This account is not active.');
-      if (user.roles.includes('admin')) throw new AppError(409, 'USER_IS_ADMIN', 'Platform administrators cannot join a hotel team.');
+      if (user.roles.some((role: UserRole) => (staffRoles as readonly UserRole[]).includes(role))) throw new AppError(409, 'USER_IS_ADMIN', 'GBBookings staff cannot join a partner team.');
       // Lock the user so two simultaneous invites cannot add them to two businesses.
       await UserModel.updateOne({ _id: user._id }, { $inc: { __v: 1 } }, { session });
       if (await VendorMemberModel.exists({ userId: user._id, deletedAt: null }).session(session)) {

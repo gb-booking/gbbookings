@@ -1,23 +1,11 @@
-import { GoogleGenAI } from '@google/genai';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import { env } from '../../config/env.js';
 import { validate } from '../../middleware/validate.js';
-import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
 import { asyncHandler } from '../../shared/async-handler.js';
 import { MongoRateLimitStore } from '../../shared/rate-limit-store.js';
 import { listPublishedListings } from '../listings/listing.service.js';
-
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient() {
-  if (!env.GEMINI_API_KEY) {
-    throw new ServiceUnavailableError('The trip assistant is not set up yet.');
-  }
-  aiClient ??= new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
-  return aiClient;
-}
+import { generate } from './ai-client.js';
 
 export const aiRouter = Router();
 
@@ -55,12 +43,9 @@ const perVisitor = chatLimit(60 * 60_000, 40, 'ai:', 'You have sent a lot of mes
 const perDay = chatLimit(24 * 60 * 60_000, 1_000, 'ai-day:', 'The trip assistant is resting for today. Please try again tomorrow.', () => 'all');
 
 aiRouter.post('/chat', perVisitor, perDay, validate('body', chatSchema), asyncHandler(async (request, response) => {
-  const ai = getAiClient();
-  const result = await ai.models.generateContent({
-    model: env.GEMINI_MODEL,
-    contents: request.body.messages.map((message: { role: string; text: string }) => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.text }] })),
-    config: { systemInstruction: CHAT_RULES + await catalogueForChat(), temperature: 0.6 },
+  const reply = await generate('trip-planner', undefined, {
+    system: CHAT_RULES + await catalogueForChat(), temperature: 0.6,
+    contents: request.body.messages.map((message: { role: string; text: string }) => ({ role: message.role === 'assistant' ? 'model' as const : 'user' as const, text: message.text })),
   });
-  if (!result.text) throw new AppError(502, 'AI_EMPTY_RESPONSE', 'The AI provider returned an empty response.');
-  response.json({ reply: result.text });
+  response.json({ reply });
 }));

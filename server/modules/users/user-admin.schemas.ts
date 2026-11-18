@@ -1,16 +1,18 @@
 import { z } from 'zod';
-import { userRoles } from '../../models/user.model.js';
+import { staffRoles, userRoles } from '../../models/user.model.js';
 
 export const createStaffSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email().max(254),
-  // The platform has administrators only; there is no employee role.
-  role: z.literal('admin'),
-}).strict();
+  role: z.enum(staffRoles),
+  // Required for 'custom_staff': the custom role's id.
+  customRoleId: z.string().regex(/^rol_/).optional(),
+}).strict().refine((input) => input.role !== 'custom_staff' || input.customRoleId, { message: 'Choose the custom role.', path: ['customRoleId'] });
 
 export const listUsersQuerySchema = z.object({
   status: z.enum(['active', 'suspended', 'archived']).optional(),
-  role: z.enum(userRoles).optional(),
+  // 'staff' is every GBBookings staff role.
+  role: z.enum([...userRoles, 'staff']).optional(),
   search: z.string().trim().max(120).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),

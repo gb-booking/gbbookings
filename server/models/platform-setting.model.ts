@@ -5,8 +5,15 @@ const { Schema } = mongoose;
 // One document (key "platform") holding the admin-set money rules. See modules/settings/settings.service.ts.
 const platformSettingSchema = new Schema({
   key: { type: String, required: true, unique: true, immutable: true },
-  // GBBookings' cut of every booking, in percent.
-  commissionPercent: { type: Number, required: true, min: 0, max: 50 },
+  // Old single rate, kept so documents saved before per-type rates still load.
+  commissionPercent: { type: Number, min: 0, max: 50 },
+  // GBBookings' cut per listing type, in percent.
+  commissionPercents: {
+    type: new Schema({ hotel: { type: Number, min: 0, max: 50 }, homestay: { type: Number, min: 0, max: 50 }, tour: { type: Number, min: 0, max: 50 }, car: { type: Number, min: 0, max: 50 } }, { _id: false }),
+    default: undefined,
+  },
+  // Paid by the guest on every booking, kept by GBBookings.
+  serviceFeePercent: { type: Number, min: 0, max: 20 },
   // Bookings made before per-listing cancellation policies: the refund for cancelling within N hours of booking, first match wins.
   refundTiers: {
     type: [new Schema({ withinHours: { type: Number, min: 1 }, refundPercent: { type: Number, min: 0, max: 100 } }, { _id: false })],

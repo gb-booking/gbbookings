@@ -2,9 +2,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { toast } from '../../shared/components/Toaster';
 import BookingsPanel from './BookingsPanel';
 import SupportPanel from './SupportPanel';
-import { BookOpenCheck, LifeBuoy, Banknote, Undo2, AlertTriangle, Building2, CalendarX, CheckCircle2, XCircle, Car, Percent, Hotel, House, Inbox, LayoutDashboard, Mountain, PanelLeftClose, PanelLeftOpen, Search, FileText, LoaderCircle, LogOut, ShieldCheck, Star, Users } from 'lucide-react';
+import { BookOpenCheck, LifeBuoy, Banknote, Undo2, AlertTriangle, Building2, CalendarX, CheckCircle2, XCircle, Car, Percent, Hotel, House, Inbox, LayoutDashboard, Mountain, PanelLeftClose, PanelLeftOpen, Search, FileText, LoaderCircle, LogOut, ShieldCheck, Star, Users,
+  BarChart3, Bell, Bot, Compass, Contact, Fingerprint, Gift, History, Image, KeyRound, ListChecks, ListTodo, MapPin, Megaphone, Receipt, RefreshCw, ScrollText, Shield, ShieldAlert, Sparkles, UserCog, Workflow } from 'lucide-react';
 import { RefundsPanel, PayoutsPanel } from './FinancePanels';
-import { api, type AdminBookingLookup, type AdminUser, type AdminVendor, type IdentityCheck, type Paginated, type PlatformSettings, type UserStatusAction, type VendorListing } from '../../shared/api/api';
+import { AuditPanel, FeatureAuditPanel, PermissionsPanel, ROLE_NAMES } from './ConsolePanels';
+import { AiCenterPage, AiControlPage, AiSupportPage, AutomationsPage, ChannelFeedsPage, CustomRolesPage, CustomersPage, DestinationsPage, ForecastPage, FraudPage, GuidesPage, MarketingPage, MediaPage, NotificationsPage, PaymentRequestsPage, ReportsPage, SecurityCenterPage, TasksPage } from './ConsolePages';
+import { AssistantChat } from '../vendor/AiTools';
+import { api, type CustomRole, type AdminBookingLookup, type AdminUser, type AdminVendor, type IdentityCheck, type ListingKind, type Paginated, type PlatformSettings, type StaffRole, type UserStatusAction, type VendorListing } from '../../shared/api/api';
 import SecurityPanel from '../account/SecurityPanel';
 import ListingReviewDetails from './ListingReviewDetails';
 import { ReviewCard } from '../reviews/ReviewParts';
@@ -14,20 +18,73 @@ import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 import Select from '../../shared/components/Select';
 
 type Product = VendorListing['type'];
-type Tab = 'overview' | 'inbox' | Product | 'bookings' | 'support' | 'vendors' | 'reviews' | 'users' | 'refunds' | 'payouts' | 'cancellations' | 'settings' | 'security';
+// A page id from the role menus below.
+type Tab = string;
 type NavItem = { id: Tab; label: string; icon: typeof Users };
+type NavGroup = { title?: string; items: NavItem[] };
 
-const navGroups: Array<{ title?: string; items: NavItem[] }> = [
-  { items: [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'inbox', label: 'Review inbox', icon: Inbox }] },
-  { title: 'Products', items: [
-    { id: 'hotel', label: 'Hotels', icon: Hotel }, { id: 'homestay', label: 'Homestays', icon: House },
-    { id: 'car', label: 'Cars', icon: Car }, { id: 'tour', label: 'Tours', icon: Mountain },
-  ] },
-  { title: 'Bookings', items: [{ id: 'bookings', label: 'All bookings', icon: BookOpenCheck }, { id: 'support', label: 'Support', icon: LifeBuoy }] },
-  { title: 'People', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'users', label: 'Users', icon: Users }, { id: 'reviews', label: 'Guest reviews', icon: Star }] },
-  { title: 'Money', items: [{ id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'payouts', label: 'Payouts', icon: Banknote }] },
-  { title: 'Tools', items: [{ id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }, { id: 'settings', label: 'Fees & refunds', icon: Percent }, { id: 'security', label: 'Account security', icon: ShieldCheck }] },
+/** The permission a page needs, for custom staff roles whose menu is built from what they may do. */
+const NEEDS: Record<string, string> = {
+  overview: 'vendor:manage', inbox: 'vendor:manage', hotel: 'listing:moderate', homestay: 'listing:moderate', car: 'listing:moderate', tour: 'listing:moderate',
+  guides: 'vendor:manage', destinations: 'listing:moderate', bookings: 'booking:manage', transactions: 'booking:read', support: 'support:manage', cancellations: 'booking:manage',
+  vendors: 'vendor:manage', customers: 'user:manage', staff: 'user:manage', users: 'user:manage', reviews: 'listing:moderate', crm: 'crm:read', loyalty: 'crm:read',
+  settings: 'finance:manage', refunds: 'finance:manage', payouts: 'finance:manage', 'payment-requests': 'booking:read', fraud: 'fraud:review', 'ai-forecast': 'finance:manage',
+  reports: 'booking:read', marketing: 'user:manage', 'ai-center': 'listing:moderate', 'ai-control': 'user:manage', 'ai-support': 'support:manage',
+  permissions: 'user:manage', 'custom-roles': 'user:manage', audit: 'audit:read', 'security-log': 'audit:read', activity: 'audit:read', 'security-center': 'user:manage',
+  automation: 'audit:read', media: 'listing:moderate', 'channel-manager': 'listing:moderate', 'feature-audit': 'user:manage',
+};
+const nav = (id: string, label: string, icon: typeof Users): NavItem => ({ id, label, icon });
+
+const ACCOUNT: NavItem = { id: 'security', label: 'Account security', icon: ShieldCheck };
+const ACTIVITY: NavItem = { id: 'activity', label: 'Activity history', icon: History };
+const NOTIFICATIONS: NavItem = nav('notifications', 'Notifications', Bell);
+const TASKS: NavItem = nav('tasks', 'Tasks', ListTodo);
+const PRODUCT_ITEMS: NavItem[] = [
+  { id: 'hotel', label: 'Hotels', icon: Hotel }, { id: 'homestay', label: 'Homestays', icon: House },
+  { id: 'car', label: 'Cars', icon: Car }, { id: 'tour', label: 'Tours', icon: Mountain },
 ];
+
+/** Each staff role's sidebar. The server checks every request again, so a menu entry is never the only guard. */
+const MENUS: Record<StaffRole, NavGroup[]> = {
+  admin: [
+    { items: [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'inbox', label: 'Review inbox', icon: Inbox }, NOTIFICATIONS] },
+    { title: 'Products', items: [...PRODUCT_ITEMS, nav('guides', 'Guides', Compass), nav('destinations', 'Destinations', MapPin)] },
+    { title: 'Bookings', items: [{ id: 'bookings', label: 'All bookings', icon: BookOpenCheck }, { id: 'support', label: 'Support', icon: LifeBuoy }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
+    { title: 'People', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'customers', label: 'Customers', icon: Users }, { id: 'staff', label: 'Staff', icon: UserCog }, { id: 'users', label: 'All users', icon: Users }, { id: 'reviews', label: 'Guest reviews', icon: Star }, nav('crm', 'CRM', Contact), nav('loyalty', 'Loyalty', Gift)] },
+    { title: 'Money', items: [{ id: 'settings', label: 'Commission & fees', icon: Percent }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'payouts', label: 'Payouts', icon: Banknote }, nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert)] },
+    { title: 'Growth', items: [nav('reports', 'Reports', BarChart3), nav('marketing', 'Marketing', Megaphone), nav('ai-center', 'AI center', Sparkles), nav('ai-control', 'AI control center', Bot)] },
+    { title: 'Platform', items: [
+      { id: 'permissions', label: 'Permissions', icon: KeyRound }, nav('custom-roles', 'Custom roles', UserCog), { id: 'audit', label: 'Audit logs', icon: ScrollText },
+      { id: 'security-log', label: 'Security log', icon: Fingerprint }, nav('security-center', 'Security center', Shield), nav('automation', 'Automation center', Workflow),
+      nav('media', 'Media & documents', Image), nav('channel-manager', 'Channel manager', RefreshCw), TASKS, { id: 'feature-audit', label: 'Feature audit', icon: ListChecks },
+    ] },
+    { title: 'You', items: [ACCOUNT] },
+  ],
+  operations_manager: [
+    { items: [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'inbox', label: 'Listing approvals', icon: Inbox }] },
+    { title: 'Products', items: PRODUCT_ITEMS },
+    { title: 'Bookings', items: [{ id: 'bookings', label: 'Bookings', icon: BookOpenCheck }, { id: 'support', label: 'Complaints & messages', icon: LifeBuoy }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
+    { title: 'Partners', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'reviews', label: 'Reviews', icon: Star }] },
+    { title: 'Work', items: [NOTIFICATIONS, nav('payment-requests', 'Payment requests', Receipt), TASKS, nav('reports', 'Reports', BarChart3), nav('ai-assistant', 'AI assistant', Sparkles)] },
+    { title: 'You', items: [ACTIVITY, ACCOUNT] },
+  ],
+  finance_manager: [
+    { title: 'Money', items: [{ id: 'payouts', label: 'Payout control center', icon: Banknote }, { id: 'transactions', label: 'Transactions', icon: BookOpenCheck }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'settings', label: 'Commission & fees', icon: Percent }] },
+    { title: 'Review', items: [nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert), nav('reports', 'Reports', BarChart3), nav('ai-forecast', 'AI forecast', Sparkles)] },
+    { title: 'You', items: [NOTIFICATIONS, TASKS, ACTIVITY, ACCOUNT] },
+  ],
+  support_agent: [
+    { title: 'Support', items: [{ id: 'support', label: 'Tickets & messages', icon: LifeBuoy }, { id: 'transactions', label: 'Bookings', icon: BookOpenCheck }] },
+    { title: 'Tools', items: [NOTIFICATIONS, nav('crm', 'CRM', Contact), nav('ai-support', 'AI support', Sparkles), TASKS] },
+    { title: 'You', items: [ACCOUNT] },
+  ],
+};
+const STAFF_ORDER: StaffRole[] = ['admin', 'operations_manager', 'finance_manager', 'support_agent'];
+
+/** A custom role's menu: the Super Admin's pages it is allowed to open, plus the pages every staff member has. */
+const customMenu = (permissions: string[]): NavGroup[] => MENUS.admin
+  .map((group) => ({ ...group, items: group.items.filter((item) => ['overview', 'inbox', 'custom-roles'].includes(item.id) ? false : !NEEDS[item.id] || permissions.includes(NEEDS[item.id])) }))
+  .filter((group) => group.items.length);
 const productNames: Record<Product, [string, string]> = { hotel: ['Hotels', 'hotel'], homestay: ['Homestays', 'homestay'], car: ['Cars', 'car'], tour: ['Tours', 'tour'] };
 const PRODUCTS: Product[] = ['hotel', 'homestay', 'car', 'tour'];
 
@@ -66,11 +123,7 @@ function IdentityCheckPanel({ vendor }: { vendor: AdminVendor }) {
     </p>
   </div>;
 }
-const roleLabels: Record<string, string> = {
-  admin: 'Platform Admin',
-  vendor_owner: 'Vendor Owner', vendor_staff: 'Vendor Employee', customer: 'Customer',
-};
-const roleLabel = (value: string) => roleLabels[value] ?? label(value);
+const roleLabel = (value: string) => ROLE_NAMES[value] ?? label(value);
 
 // Admin decisions always carry a review note.
 function useReviewDialog() {
@@ -370,15 +423,17 @@ function ReviewsPanel() {
   );
 }
 
-function UsersPanel() {
+function UsersPanel({ initialRole = '' }: { initialRole?: string }) {
   const { askReason, dialog } = useReviewDialog();
   const [status, setStatus] = useState('');
-  const [role, setRole] = useState('');
+  const [role, setRole] = useState(initialRole);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
-  const [staff, setStaff] = useState({ name: '', email: '' });
+  const [staff, setStaff] = useState({ name: '', email: '', role: 'operations_manager' });
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>();
+  useEffect(() => { api.console.customRoles().then(setCustomRoles).catch(() => undefined); }, []);
   const [notice, setNotice] = useState('');
   const { result, loading, loadError, replace } = usePaged(
     () => api.admin.listUsers({ status: status || undefined, role: role || undefined, search: query || undefined, page }),
@@ -400,7 +455,8 @@ function UsersPanel() {
             className="min-h-11 rounded-md border border-slate-300 px-3 text-sm" />
           <Select aria-label="Filter users by role" value={role} onChange={(event) => { setRole(event.target.value); setPage(1); }} className={selectClass}>
             <option value="">All roles</option>
-            {['customer', 'vendor_owner', 'vendor_staff', 'admin'].map((value) => <option key={value} value={value}>{roleLabel(value)}</option>)}
+            <option value="staff">All staff</option>
+            {['customer', 'vendor_owner', 'vendor_staff', ...STAFF_ORDER, 'custom_staff'].map((value) => <option key={value} value={value}>{roleLabel(value)}</option>)}
           </Select>
           <Select aria-label="Filter users by status" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className={selectClass}>
             <option value="">All statuses</option>
@@ -408,23 +464,30 @@ function UsersPanel() {
           </Select>
         </form>
       }>
-      <form className="grid gap-3 bg-slate-50 p-4 sm:grid-cols-3" onSubmit={(event) => {
+      <form className="grid gap-3 bg-slate-50 p-4 sm:grid-cols-4" onSubmit={(event) => {
         event.preventDefault();
         setNotice('');
         run('new-staff', async () => {
-          const created = await api.admin.createStaff({ ...staff, role: 'admin' });
+          // Custom roles are listed as "custom:<id>".
+          const created = await api.admin.createStaff(staff.role.startsWith('custom:')
+            ? { name: staff.name, email: staff.email, role: 'custom_staff', customRoleId: staff.role.slice(7) }
+            : { name: staff.name, email: staff.email, role: staff.role as StaffRole });
           setNotice(created.invitationSent
             ? 'Account created. A password setup link has been emailed to the recipient.'
             : 'Account created, but email delivery failed. Use Resend setup link below.');
-          setStaff({ name: '', email: '' });
+          setStaff({ ...staff, name: '', email: '' });
           setRevision((value) => value + 1);
         });
       }}>
-        <h3 className="font-semibold sm:col-span-3">Invite an administrator</h3>
-        <label className="text-xs font-semibold">Full name<input required minLength={2} maxLength={120} className={`${selectClass} mt-1 w-full`} value={staff.name} onChange={(event) => setStaff({ ...staff, name: event.target.value })} /></label>
-        <label className="text-xs font-semibold">Email<input type="email" required className={`${selectClass} mt-1 w-full`} value={staff.email} onChange={(event) => setStaff({ ...staff, email: event.target.value })} /></label>
+        <h3 className="font-semibold sm:col-span-4">Invite a staff member</h3>
+        <label className="text-xs font-semibold">Full name<input required minLength={2} maxLength={120} className={`${selectClass} mt-1 w-full normal-case`} value={staff.name} onChange={(event) => setStaff({ ...staff, name: event.target.value })} /></label>
+        <label className="text-xs font-semibold">Email<input type="email" required className={`${selectClass} mt-1 w-full normal-case`} value={staff.email} onChange={(event) => setStaff({ ...staff, email: event.target.value })} /></label>
+        <label className="text-xs font-semibold">Role<Select value={staff.role} onChange={(event) => setStaff({ ...staff, role: event.target.value })} className={`${selectClass} mt-1 w-full`}>
+          {STAFF_ORDER.map((value) => <option key={value} value={value}>{roleLabel(value)}</option>)}
+          {customRoles?.filter((role) => role.status === 'active').map((role) => <option key={role.id} value={`custom:${role.id}`}>{role.name} (custom)</option>)}
+        </Select></label>
         <button disabled={busyId !== null} className={`${primaryButton} self-end`}>Create account and send setup link</button>
-        {notice && <p role="status" className="text-sm sm:col-span-3">{notice}</p>}
+        {notice && <p role="status" className="text-sm sm:col-span-4">{notice}</p>}
       </form>
       {result?.data.map((user) => (
         <div key={user.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
@@ -435,7 +498,7 @@ function UsersPanel() {
           </div>
           <span className="text-xs font-bold uppercase text-indigo-700">{user.status}</span>
           <div className="flex flex-wrap gap-2">
-            {user.status === 'active' && user.roles.includes('admin') && <button type="button" className={secondaryButton} disabled={busyId !== null} onClick={() => run(user.id, async () => {
+            {user.status === 'active' && user.roles.some((value) => [...STAFF_ORDER, 'custom_staff'].includes(value)) && <button type="button" className={secondaryButton} disabled={busyId !== null} onClick={() => run(user.id, async () => {
               await api.forgotPassword(user.email);
               setNotice('Password setup instructions requested. The recipient can also use Forgot password on the sign-in screen.');
             })}>Resend setup link</button>}
@@ -557,8 +620,16 @@ function SettingsPanel() {
       <fieldset disabled={!editing} className="space-y-6 disabled:[&_input]:bg-slate-50 disabled:[&_input]:text-slate-600">
       <fieldset className="space-y-2">
         <legend className="text-base font-bold text-slate-900">Commission</legend>
-        <label className="block text-sm font-semibold text-slate-800">Percent of every booking's total, excluding taxes{percentInput(settings.commissionPercent, (commissionPercent) => set({ commissionPercent }), 50)}</label>
-        <p className="text-sm text-slate-500">Each booking keeps the percent it was made with. A cancelled unpaid booking owes nothing; on a paid one it is charged only on what the partner keeps.</p>
+        <p className="text-sm text-slate-500">Paid by the partner: a percent of each booking's price, excluding taxes and the service fee. Each booking keeps the percent it was made with. A cancelled unpaid booking owes nothing; on a paid one it is charged only on what the partner keeps.</p>
+        <div className="flex flex-wrap gap-4">
+          {(['hotel', 'homestay', 'tour', 'car'] as ListingKind[]).map((kind) => <label key={kind} className="text-sm font-semibold capitalize text-slate-800">{kind}s %
+            {percentInput(settings.commissionPercents[kind], (value) => set({ commissionPercents: { ...settings.commissionPercents, [kind]: value } }), 50)}</label>)}
+        </div>
+      </fieldset>
+      <fieldset className="space-y-2">
+        <legend className="text-base font-bold text-slate-900">Guest service fee</legend>
+        <label className="block text-sm font-semibold text-slate-800">Percent added to every booking, paid by the guest and kept by GBBookings{percentInput(settings.serviceFeePercent, (serviceFeePercent) => set({ serviceFeePercent }), 20)}</label>
+        <p className="text-sm text-slate-500">Shown as its own line at checkout, on the price plus any partner fees. No taxes or commission are charged on it. Refunds return the same share of it.</p>
       </fieldset>
       <fieldset className="space-y-3">
         <legend className="text-base font-bold text-slate-900">Taxes</legend>
@@ -894,6 +965,34 @@ function OverviewPanel({ summary, error, onOpen, onReview }: { summary: Summary 
 
 const sectionDetails: Record<Tab, { title: string; description: string }> = {
   overview: { title: '', description: '' },
+  customers: { title: 'Customers', description: 'Guests with an account. Suspend or archive accounts that break the rules.' },
+  staff: { title: 'Staff', description: 'GBBookings employees and their roles. Each role sees only its own pages; the server checks every action again.' },
+  transactions: { title: 'Bookings', description: 'Every booking and its payment, read-only. Operations staff handle changes and disputes.' },
+  permissions: { title: 'Permissions', description: 'What each role can do. Roles are set in the code so they cannot be changed by accident; ask a developer to change one.' },
+  audit: { title: 'Audit logs', description: 'Every approval, payout, commission change and other staff or partner action, newest first.' },
+  'security-log': { title: 'Security log', description: 'Sign-ins, two-step codes, password changes and lockouts, with the device and IP address.' },
+  activity: { title: 'Activity history', description: 'What you have done in the console, newest first.' },
+  'feature-audit': { title: 'Feature audit', description: 'Which pages in the console work today and which are still to be built.' },
+  notifications: { title: 'Notifications', description: 'Everything waiting for you, by what you are allowed to act on.' },
+  tasks: { title: 'Tasks', description: 'Follow-ups for staff, with due dates.' },
+  reports: { title: 'Reports', description: 'Bookings, revenue, cancellations, refunds, commission, payouts and popular destinations for any dates, each with CSV export.' },
+  'payment-requests': { title: 'Payment requests', description: 'What partners have asked guests to pay on top of a booking. Partners collect these themselves.' },
+  fraud: { title: 'Fraud review', description: 'Bookings and partners that match a risk rule, for a person to look at.' },
+  crm: { title: 'CRM', description: 'Guests with their value, trips and tags.' },
+  loyalty: { title: 'Loyalty', description: 'Guest points, tiers and referral codes.' },
+  marketing: { title: 'Marketing', description: 'Newsletter subscribers for campaigns.' },
+  'ai-center': { title: 'AI center', description: 'AI suggestions for listings, support, forecasts and partners.' },
+  'ai-control': { title: 'AI control center', description: 'AI usage per feature over the last 30 days, with a switch for each.' },
+  'ai-assistant': { title: 'AI assistant', description: 'Ask how to do something in the console.' },
+  'ai-forecast': { title: 'AI forecast', description: 'The next four weeks: what is already booked, and a projection from recent weeks.' },
+  'ai-support': { title: 'AI support', description: 'Draft replies to open support cases.' },
+  'custom-roles': { title: 'Custom roles', description: 'Extra staff roles built from the permissions, such as a regional manager.' },
+  'security-center': { title: 'Security center', description: 'Every staff account: two-step sign-in, signed-in devices and lockouts.' },
+  automation: { title: 'Automation center', description: 'What GBBookings does on its own, and how often.' },
+  media: { title: 'Media & documents', description: 'Every photo and file uploaded to the platform.' },
+  'channel-manager': { title: 'Channel manager', description: 'Calendars partners linked from other booking sites, and any that are failing.' },
+  destinations: { title: 'Destinations', description: 'The destinations on the website and what is live in each.' },
+  guides: { title: 'Guides', description: 'Tour companies and independent guides, with their licences and tours.' },
   hotel: { title: 'Hotels', description: 'Every hotel on the platform. Review new ones, approve edits to live ones, and take down listings that break the rules.' },
   homestay: { title: 'Homestays', description: 'Every homestay on the platform, from family rooms to entire homes.' },
   car: { title: 'Cars', description: 'Every car listing, from rental companies and owner-drivers.' },
@@ -904,20 +1003,25 @@ const sectionDetails: Record<Tab, { title: string; description: string }> = {
   vendors: { title: 'Partner reviews', description: 'Review vendor applications, verify documents and manage partner access.' },
   reviews: { title: 'Guest reviews', description: 'Reviews partners reported, and reviews you have hidden. Remove only abusive, fake or off-topic reviews and personal data; honest criticism stays.' },
   users: { title: 'People & access', description: 'Manage customer and partner accounts, invite administrators and control platform access.' },
-  refunds: { title: 'Refunds', description: 'Money owed back to guests. Payments on Safepay go back through Safepay; money a partner collected on arrival is returned by that partner.' },
-  payouts: { title: 'Payouts', description: 'What each partner is owed or owes, the statements you have issued, and the totals to check against Safepay and the bank.' },
+  refunds: { title: 'Refunds', description: 'Money owed back to guests. Pay now payments go back through the payment provider; money a partner collected on arrival is returned by that partner.' },
+  payouts: { title: 'Payouts', description: 'What each partner is owed or owes, the statements you have issued, and the totals to check against the payment provider and the bank.' },
   cancellations: { title: 'Cancel a booking', description: 'For disputes or fraud only. Hotels run their own reservations; find a booking by its reference to cancel it on the guest’s behalf.' },
-  settings: { title: 'Fees & refunds', description: 'GBBookings’ commission and the taxes on every booking. Changes apply to bookings made from now on. Partners pick each listing’s cancellation policy.' },
+  settings: { title: 'Commission & fees', description: 'GBBookings’ commission per kind of listing, the guest service fee and the taxes on every booking. Changes apply to bookings made from now on. Partners pick each listing’s cancellation policy.' },
   security: { title: 'Account security', description: 'Manage your password, active sessions and two-factor authentication.' },
 };
 
 const NAV_KEY = 'gb-admin-nav-open';
 
-export default function AdminDashboard({ roles, userName = 'Staff member', userEmail = '', onSignOut }: {
-  roles: string[]; userName?: string; userEmail?: string; onSignOut: () => Promise<void>;
+export default function AdminDashboard({ roles, permissions = [], userName = 'Staff member', userEmail = '', onSignOut }: {
+  roles: string[]; permissions?: string[]; userName?: string; userEmail?: string; onSignOut: () => Promise<void>;
 }) {
-  const isAdmin = roles.includes('admin');
-  const [tab, setTab] = useState<Tab>('overview');
+  // The highest staff role decides the menu; a custom role gets the pages its permissions allow.
+  const staffRole = STAFF_ORDER.find((role) => roles.includes(role)) ?? (roles.includes('custom_staff') ? 'custom_staff' : undefined);
+  const menu = staffRole === 'custom_staff' ? customMenu(permissions) : staffRole ? MENUS[staffRole] : [];
+  const menuItems = menu.flatMap((group) => group.items);
+  // Overview and badges read partners, listings and reviews: only roles that approve them.
+  const isAdmin = staffRole === 'admin' || staffRole === 'operations_manager';
+  const [tab, setTab] = useState<Tab>(() => menuItems[0]?.id ?? 'security');
   const [inboxKey, setInboxKey] = useState<string>();
   const [signingOut, setSigningOut] = useState(false);
   const [navOpen, setNavOpen] = useState(() => { try { return localStorage.getItem(NAV_KEY) !== '0'; } catch { return true; } });
@@ -939,8 +1043,8 @@ export default function AdminDashboard({ roles, userName = 'Staff member', userE
   const toggleNav = () => setNavOpen((open) => { try { localStorage.setItem(NAV_KEY, open ? '0' : '1'); } catch { /* storage blocked */ } return !open; });
   const signOut = async () => { setSigningOut(true); try { await onSignOut(); } finally { setSigningOut(false); } };
 
-  if (!isAdmin) return <main className="p-8"><h1 className="text-xl font-bold">Admin access required</h1></main>;
-  const section = sectionDetails[tab];
+  if (!staffRole) return <main className="p-8"><h1 className="text-xl font-bold">Staff access required</h1></main>;
+  const section = sectionDetails[tab] ?? { title: menuItems.find((item) => item.id === tab)?.label ?? '', description: '' };
   const badges: Partial<Record<Tab, number>> = { bookings: summary?.disputes, support: summary?.support, inbox: summary?.queue.length, reviews: summary?.reported };
   // Below md the menu is always the icon rail; the toggle only widens it on larger screens.
   const labelClass = navOpen ? 'hidden md:block' : 'hidden';
@@ -952,13 +1056,13 @@ export default function AdminDashboard({ roles, userName = 'Staff member', userE
       <nav aria-label="Admin sections" className={`sticky top-0 flex h-dvh w-[68px] shrink-0 flex-col gap-4 overflow-y-auto bg-[#002816] px-2.5 py-5 text-[#CFE3D6] transition-[width] ${navOpen ? 'md:w-64' : ''}`}>
         <div className="flex items-center gap-2.5 px-1">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#006F3C]"><ShieldCheck className="size-5 text-white" /></span>
-          <span className={`${labelClass} leading-tight`}><span className="block text-base font-extrabold text-white">GBBookings</span><span className="text-[11px] font-bold tracking-[0.14em] text-[#8FBFA0]">ADMIN</span></span>
+          <span className={`${labelClass} leading-tight`}><span className="block text-base font-extrabold text-white">GBBookings</span><span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8FBFA0]">{ROLE_NAMES[staffRole]}</span></span>
         </div>
         <button type="button" onClick={toggleNav} aria-expanded={navOpen} aria-label={navOpen ? 'Collapse menu' : 'Expand menu'} title={navOpen ? 'Collapse menu' : 'Expand menu'}
           className={`hidden min-h-10 items-center gap-2.5 rounded-lg border border-[#1F4A33] px-3 text-[13px] font-semibold hover:bg-white/5 md:flex ${navOpen ? '' : 'justify-center'}`}>
           {navOpen ? <PanelLeftClose className="size-[18px] shrink-0" /> : <PanelLeftOpen className="size-[18px] shrink-0" />}<span className={labelClass}>Collapse menu</span>
         </button>
-        {navGroups.map((group, index) => <div key={index} className="flex flex-col gap-0.5">
+        {menu.map((group, index) => <div key={index} className="flex flex-col gap-0.5">
           {group.title && <p className={`${labelClass} px-3 pb-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#7FA88F]`}>{group.title}</p>}
           {group.title && <div className={`${navOpen ? 'md:hidden' : ''} mx-2 mb-2 h-px bg-[#1F4A33]`} />}
           {group.items.map(({ id, label: text, icon: Icon }) => {
@@ -977,7 +1081,7 @@ export default function AdminDashboard({ roles, userName = 'Staff member', userE
         </div>)}
         <div className={`mt-auto flex items-center gap-2.5 border-t border-[#1F4A33] px-1 pt-4 ${navOpen ? 'flex-col md:flex-row' : 'flex-col'}`}>
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#F59E3B] font-extrabold text-[#17211B]" aria-hidden="true">{userName.charAt(0).toUpperCase()}</span>
-          <span className={`${labelClass} min-w-0 flex-1 text-[13px] leading-tight`}><strong className="block truncate text-white">{userName}</strong><span className="block truncate text-[#8FBFA0]">{userEmail || 'Platform Admin'}</span></span>
+          <span className={`${labelClass} min-w-0 flex-1 text-[13px] leading-tight`}><strong className="block truncate text-white">{userName}</strong><span className="block truncate text-[#8FBFA0]">{userEmail || ROLE_NAMES[staffRole]}</span></span>
           <button type="button" onClick={signOut} disabled={signingOut} aria-label="Sign out" title="Sign out" className="flex size-9 shrink-0 items-center justify-center rounded-lg hover:bg-white/10 hover:text-white disabled:opacity-50"><LogOut className="size-4" /></button>
         </div>
       </nav>
@@ -1001,8 +1105,36 @@ export default function AdminDashboard({ roles, userName = 'Staff member', userE
           {PRODUCTS.includes(tab as Product) && <ListingsPanel key={tab} type={tab as Product} />}
           {tab === 'vendors' && <VendorsPanel />}
           {tab === 'reviews' && <ReviewsPanel />}
-          {tab === 'users' && <UsersPanel />}
+          {tab === 'users' && <UsersPanel key="users" />}
+          {tab === 'customers' && <UsersPanel key="customers" initialRole="customer" />}
+          {tab === 'staff' && <UsersPanel key="staff" initialRole="staff" />}
           {tab === 'bookings' && <BookingsPanel onChanged={() => setSummaryRevision((value) => value + 1)} />}
+          {tab === 'transactions' && <BookingsPanel readOnly onChanged={() => undefined} />}
+          {tab === 'permissions' && <PermissionsPanel />}
+          {tab === 'audit' && <AuditPanel key="audit" kind="activity" />}
+          {tab === 'security-log' && <AuditPanel key="security-log" kind="security" />}
+          {tab === 'activity' && <AuditPanel key="activity" kind="activity" mine />}
+          {tab === 'feature-audit' && <FeatureAuditPanel items={menuItems.map((item) => ({ label: item.label, built: true }))} />}
+          {tab === 'reports' && <ReportsPage />}
+          {tab === 'payment-requests' && <PaymentRequestsPage />}
+          {tab === 'fraud' && <FraudPage />}
+          {tab === 'crm' && <CustomersPage />}
+          {tab === 'loyalty' && <CustomersPage loyalty />}
+          {tab === 'tasks' && <TasksPage />}
+          {tab === 'notifications' && <NotificationsPage onOpen={(page) => navigate(menuItems.some((item) => item.id === page) ? page : 'overview')} />}
+          {tab === 'security-center' && <SecurityCenterPage />}
+          {tab === 'automation' && <AutomationsPage />}
+          {tab === 'channel-manager' && <ChannelFeedsPage />}
+          {tab === 'media' && <MediaPage />}
+          {tab === 'destinations' && <DestinationsPage />}
+          {tab === 'guides' && <GuidesPage />}
+          {tab === 'marketing' && <MarketingPage />}
+          {tab === 'custom-roles' && <CustomRolesPage />}
+          {tab === 'ai-control' && <AiControlPage />}
+          {tab === 'ai-center' && <AiCenterPage />}
+          {tab === 'ai-forecast' && <ForecastPage />}
+          {tab === 'ai-support' && <AiSupportPage />}
+          {tab === 'ai-assistant' && <AssistantChat />}
           {tab === 'support' && <SupportPanel onChanged={() => setSummaryRevision((value) => value + 1)} />}
           {tab === 'cancellations' && <CancelBookingPanel />}
           {tab === 'refunds' && <RefundsPanel />}

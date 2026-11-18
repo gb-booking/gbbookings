@@ -60,7 +60,7 @@ export function PaymentWaiting({ bookingId, url }: { bookingId: string; url: str
   return <section role="status" className="mx-auto max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-7 text-center">
     <LoaderCircle className="mx-auto size-8 animate-spin text-[#006F3C]" aria-hidden="true" />
     <h1 className="text-xl font-bold text-slate-950">Finish paying in the new tab</h1>
-    <p className="text-sm leading-6 text-slate-600">Safepay's secure page opened in another tab. Keep this page open: it updates as soon as you're done. Your room is held for you meanwhile.</p>
+    <p className="text-sm leading-6 text-slate-600">The secure payment page opened in another tab. Keep this page open: it updates as soon as you're done. Your room is held for you meanwhile.</p>
     {blocked && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">Your browser blocked the tab. Allow pop-ups for this site, or press the button again.</p>}
     <div className="flex flex-col gap-2">
       <button type="button" onClick={() => { const tab = window.open(url, '_blank'); setBlocked(!tab); if (tab) tab.opener = null; }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"><ExternalLink className="size-4" aria-hidden="true" />Open the payment page again</button>

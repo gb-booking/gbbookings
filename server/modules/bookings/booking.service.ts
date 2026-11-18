@@ -27,8 +27,8 @@ import { rentalExtrasMinor, rentalTerms, shownEnd, storedEnd, type RentalChoice 
 import { assertSeats, assertTourDate, tourSubtotalMinor, tourTerms } from './tour.js';
 import { nightPriceMinor, ratePlanMinor, staySubtotalMinor, type PricedUnit, type RatePlan, type RatePlans } from './room-price.js';
 import { stayDealPercent, stayRuleProblem } from '../../../src/shared/utils/roomPricing.js';
-import { getPlatformSettings, guestRefundPercent, percentOfMinor } from '../settings/settings.service.js';
-import { ONLINE_HOLD_MINUTES, onlinePaymentsEnabled, startSafepayCheckout, trackerPaid, trackersIn } from '../payments/safepay.js';
+import { getPlatformSettings, guestRefundPercent, percentOfMinor, type ListingKind } from '../settings/settings.service.js';
+import { ONLINE_HOLD_MINUTES, onlinePaymentsEnabled, startSafepayCheckout, trackerPaid } from '../payments/safepay.js';
 import { DEFAULT_CANCELLATION_POLICY, daysBetween, fullRefundUntil, refundPercentFor } from '../../../src/shared/utils/cancellation.js';
 import { applyCharges, chargeRulesFor, commissionOn, type ChargeRule } from './charges.js';
 import { heldMinor } from '../finance/settlement.js';
@@ -38,7 +38,7 @@ import { inngestEnabled } from '../jobs/inngest.js';
 export const BOOKABLE_LISTING_TYPES = ['hotel', 'homestay', 'car', 'tour'];
 
 
-type Actor = { userId: string; roles: UserRole[] };
+type Actor = { userId: string; roles: UserRole[]; extraPermissions?: readonly string[] };
 
 async function requireDatabase() {
   if (!await connectDatabase()) throw new ServiceUnavailableError('Bookings are unavailable while the database is disconnected.');
@@ -271,7 +271,7 @@ export async function getListingAvailability(
   // Quoted exactly as createBooking will charge: meals per guest per night on top of the room price.
   const mealsMinor = mealsCostMinor(chosenMeals(listing, query.meals), query.adults + query.children, nights.length);
   const coupon = query.coupon ? await findUsableCoupon(listing.ownerId, query.coupon) : undefined;
-  const chargeRules = chargeRulesFor(listing, (await getPlatformSettings()).taxes);
+  const chargeRules = chargeRulesFor(listing, await getPlatformSettings());
   const policy = listing.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY;
   const roomTypes = await HotelRoomTypeModel.find({ listingId: listing._id, status: 'active', deletedAt: null })
     .sort({ basePriceMinor: 1 })
@@ -398,7 +398,8 @@ export async function createBooking(
   if (input.paymentMethod === 'online' && !onlinePaymentsEnabled()) {
     throw new AppError(503, 'ONLINE_PAYMENT_UNAVAILABLE', 'Online payment is not available right now. Choose Pay on arrival.');
   }
-  const { commissionPercent, taxes } = await getPlatformSettings();
+  const settings = await getPlatformSettings();
+  const commissionPercent = settings.commissionPercents[listing.type as ListingKind] ?? 0;
 
   try {
     const result = await inTransaction(async (session) => {
@@ -431,7 +432,7 @@ export async function createBooking(
       const extrasMinor = rentalExtrasMinor(rental, nights.length, input.rooms);
       const coupon = input.couponCode ? await claimCoupon(listing.ownerId, input.couponCode, session) : undefined;
       const couponMinor = discountMinor(coupon, subtotalMinor + mealsMinor + extrasMinor);
-      const charged = applyCharges(subtotalMinor + mealsMinor + extrasMinor - couponMinor, chargeRulesFor(listing, taxes));
+      const charged = applyCharges(subtotalMinor + mealsMinor + extrasMinor - couponMinor, chargeRulesFor(listing, settings));
       const totalMinor = charged.totalMinor;
       if (input.expectedTotalMinor !== undefined && input.expectedTotalMinor !== totalMinor) {
         throw new AppError(409, 'PRICE_CHANGED', 'The room price changed. Edit traveler details and review the latest price before reserving.');
@@ -467,8 +468,8 @@ export async function createBooking(
       meals: meals.length ? meals : undefined,
       pricing: {
         currency: 'PKR', nightlyRateMinor: averageRateMinor(subtotalMinor, nights, input.rooms, room, tour), subtotalMinor, mealsMinor, extrasMinor, discountMinor: couponMinor, totalMinor,
-        charges: charged.lines.length ? charged.lines : undefined, feesMinor: charged.feesMinor, taxesMinor: charged.taxesMinor,
-        commissionPercent, commissionMinor: commissionOn({ totalMinor, taxesMinor: charged.taxesMinor, commissionPercent }),
+        charges: charged.lines.length ? charged.lines : undefined, feesMinor: charged.feesMinor, taxesMinor: charged.taxesMinor, serviceMinor: charged.serviceMinor,
+        commissionPercent, commissionMinor: commissionOn({ totalMinor, taxesMinor: charged.taxesMinor, serviceMinor: charged.serviceMinor, commissionPercent }),
       },
       cancellationPolicy: ratePlan === 'non_refundable' ? 'non_refundable' : listing.cancellationPolicy ?? DEFAULT_CANCELLATION_POLICY,
       ...(ratePlan === 'non_refundable' ? { ratePlan } : {}),
@@ -507,13 +508,13 @@ export async function createBooking(
   }
 }
 
-/** Where Safepay sends the guest back: the Bookings page, which checks the payment. */
+/** Where the payment page sends the guest back: the Bookings page, which checks the payment. */
 const paymentReturnUrl = (booking: any, cancelled = false) =>
   `${env.APP_URL ?? 'http://localhost:3000'}/bookings?payment=${booking.publicId}${cancelled ? '&cancelled=1' : ''}`;
 
 const MAX_PAYMENT_ATTEMPTS = 5;
 
-/** Opens Safepay's payment page for an unpaid Pay now booking. Each call (a retry) opens a new tracker. */
+/** Opens the payment page for an unpaid Pay now booking. Each call (a retry) opens a new tracker. */
 export async function startOnlinePayment(actor: Actor, bookingId: string) {
   await requireDatabase();
   const { booking, isCustomer } = await accessibleBooking(actor, bookingId);
@@ -538,7 +539,7 @@ export async function startOnlinePayment(actor: Actor, bookingId: string) {
   return { url };
 }
 
-/** Asks Safepay about each tracker of an unpaid Pay now booking and records the payment if one was paid. */
+/** Asks the payment provider about each tracker of an unpaid Pay now booking and records the payment if one was paid. */
 async function settleOnlinePayment(booking: any) {
   if (booking.paymentStatus !== 'pending') return booking.paymentStatus === 'paid';
   for (const tracker of [...(booking.onlinePayment?.trackers ?? [])].reverse()) {
@@ -583,7 +584,7 @@ async function markPaidOnline(booking: any, tracker: string) {
   else await notifyBooking(updated, 'paid');
 }
 
-/** The guest's return from Safepay: checks the payment with Safepay and returns the booking. */
+/** The guest's return from the payment page: checks the payment with the provider and returns the booking. */
 export async function verifyOnlinePayment(actor: Actor, bookingId: string) {
   await requireDatabase();
   const { booking, isCustomer } = await accessibleBooking(actor, bookingId);
@@ -596,10 +597,9 @@ export async function verifyOnlinePayment(actor: Actor, bookingId: string) {
   return serializeBooking(await BookingModel.findById(booking._id));
 }
 
-/** Safepay webhook: the body only says which trackers to re-check; the outcome always comes from Safepay itself. */
-export async function handleSafepayWebhook(body: unknown) {
+/** A payment webhook named these trackers: re-check each with the provider itself, never trusting the webhook about the outcome. */
+export async function recheckPaymentTrackers(trackers: string[]) {
   if (!await connectDatabase()) throw new ServiceUnavailableError('Bookings are unavailable while the database is disconnected.');
-  const trackers = trackersIn(body);
   if (!trackers.length) return;
   const bookings = await BookingModel.find({ 'onlinePayment.trackers': { $in: trackers } }).limit(5);
   for (const booking of bookings) {
@@ -846,7 +846,7 @@ async function accessibleBooking(actor: Actor, bookingId: string) {
   const booking = await BookingModel.findOne({ publicId: bookingId });
   if (!booking) throw new AppError(404, 'BOOKING_NOT_FOUND', 'Booking not found.');
   const isCustomer = String(booking.customerId) === actor.userId;
-  const isManager = hasPermission(actor.roles, 'booking:manage');
+  const isManager = hasPermission(actor.roles, 'booking:manage', actor.extraPermissions);
   const isVendor = !isCustomer && !isManager && Boolean(booking.vendorId)
     && (await reservationVendorIds(actor.userId)).some((id) => String(id) === String(booking.vendorId));
   // 404 rather than 403 so booking IDs cannot be probed.
@@ -1066,9 +1066,9 @@ async function applyBookingChange(actor: Actor, booking: any, input: { checkIn: 
           roomSnapshot: { publicId: room.publicId, name: room.name, bedType: room.bedType },
           pricing: {
             currency: 'PKR', nightlyRateMinor: averageRateMinor(subtotalMinor, nights, input.rooms, room, booking.tour ?? undefined), subtotalMinor, mealsMinor, extrasMinor, discountMinor: couponMinor, totalMinor,
-            charges: charged.lines.length ? charged.lines : undefined, feesMinor: charged.feesMinor, taxesMinor: charged.taxesMinor, balanceDueMinor,
+            charges: charged.lines.length ? charged.lines : undefined, feesMinor: charged.feesMinor, taxesMinor: charged.taxesMinor, serviceMinor: charged.serviceMinor, balanceDueMinor,
             // The commission percent stays as agreed at booking.
-            commissionPercent: booking.pricing.commissionPercent ?? 0, commissionMinor: commissionOn({ totalMinor, taxesMinor: charged.taxesMinor, commissionPercent: booking.pricing.commissionPercent ?? 0 }),
+            commissionPercent: booking.pricing.commissionPercent ?? 0, commissionMinor: commissionOn({ totalMinor, taxesMinor: charged.taxesMinor, serviceMinor: charged.serviceMinor, commissionPercent: booking.pricing.commissionPercent ?? 0 }),
           },
         },
         $unset: { changeRequest: 1 },

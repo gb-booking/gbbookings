@@ -246,7 +246,7 @@ async function stayTotals(records: any[], checkIn: string, checkOut: string, gue
     if ((available.get(String(room._id)) ?? 0) < 1 || stayRuleProblem(room, nights.length, checkIn)) continue;
     const listing = byId.get(String(room.listingId));
     const roomMinor = ratePlanMinor(staySubtotalMinor(room, nights, 1, today), listing.ratePlans, { adults: guests, children: 0, rooms: 1 });
-    const totalMinor = applyCharges(roomMinor, chargeRulesFor(listing, settings.taxes)).totalMinor;
+    const totalMinor = applyCharges(roomMinor, chargeRulesFor(listing, settings)).totalMinor;
     const key = String(room.listingId);
     if (!totals.has(key) || totalMinor / 100 < totals.get(key)!) totals.set(key, totalMinor / 100);
   }

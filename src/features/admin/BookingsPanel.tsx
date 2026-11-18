@@ -16,7 +16,8 @@ const OUTCOME: Record<string, string> = { no_show_stands: 'No-show stands', gues
 const label = (value: string) => value.replace(/_/g, ' ');
 
 /** Every booking on the platform: search, filter, export, and the no-show disputes guests have raised. */
-export default function BookingsPanel({ onChanged }: { onChanged: () => void }) {
+/** `readOnly`: finance and support staff see bookings but cannot decide disputes. */
+export default function BookingsPanel({ onChanged, readOnly = false }: { onChanged: () => void; readOnly?: boolean }) {
   const { askReason, dialog } = useReasonDialog();
   const [view, setView] = useState<'all' | 'disputes'>('all');
   const [search, setSearch] = useState('');
@@ -64,7 +65,7 @@ export default function BookingsPanel({ onChanged }: { onChanged: () => void }) 
         {([['all', 'All bookings'], ['disputes', 'No-show disputes']] as const).map(([id, text]) => <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
           className={`flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold ${view === id ? 'bg-[#006F3C] text-white' : 'text-slate-600 hover:bg-slate-50'}`}>{text}{id === 'disputes' && Boolean(result?.openDisputes) && <span className={`rounded-full px-1.5 text-xs ${view === id ? 'bg-white text-[#006F3C]' : 'bg-rose-600 text-white'}`}>{result!.openDisputes}</span>}</button>)}
       </div>
-      <button type="button" className={button} disabled={!result?.total} onClick={() => void api.admin.exportBookings(query).catch((reason: Error) => setError(reason.message))}><Download className="size-4" aria-hidden="true" />Export CSV</button>
+      {!readOnly && <button type="button" className={button} disabled={!result?.total} onClick={() => void api.admin.exportBookings(query).catch((reason: Error) => setError(reason.message))}><Download className="size-4" aria-hidden="true" />Export CSV</button>}
     </div>
 
     <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -109,11 +110,11 @@ export default function BookingsPanel({ onChanged }: { onChanged: () => void }) 
                 ['GBBookings fee', booking.platformFee ? pkr(booking.platformFee) : '—'], ['Booked', formatDateForDisplay(booking.createdAt)], ['Checked in', booking.checkedInAt ? formatDateForDisplay(booking.checkedInAt) : '—']]
                 .map(([term, value]) => <div key={term}><dt className="text-slate-500">{term}</dt><dd className="font-medium text-slate-900 break-words">{value || '—'}</dd></div>)}
             </dl>
-            {booking.refunds?.map((refund, index) => <p key={index} className="text-slate-700">Refund: {pkr(refund.amount)} · {refund.channel === 'partner' ? 'the partner returns it' : 'through Safepay'} · {refund.status}</p>)}
+            {booking.refunds?.map((refund, index) => <p key={index} className="text-slate-700">Refund: {pkr(refund.amount)} · {refund.channel === 'partner' ? 'the partner returns it' : 'through the payment provider'} · {refund.status}</p>)}
             {dispute && <div className="space-y-2 rounded-lg bg-amber-50 p-3 text-amber-950">
               <p className="font-semibold">The guest disputes this no-show, {formatDateForDisplay(dispute.at)}</p>
               <p>“{dispute.note}”</p>
-              {dispute.status === 'open' ? <div className="flex flex-wrap gap-2 pt-1">
+              {dispute.status === 'open' ? readOnly ? <p>Waiting for the operations team to decide.</p> : <div className="flex flex-wrap gap-2 pt-1">
                 <button type="button" disabled={busy} className={button} onClick={() => void decide(booking, 'guest_stayed')}>Guest stayed</button>
                 <button type="button" disabled={busy} className={button} onClick={() => void decide(booking, 'refund_guest')}>Refund the guest</button>
                 <button type="button" disabled={busy} className={button} onClick={() => void decide(booking, 'no_show_stands')}>No-show stands</button>

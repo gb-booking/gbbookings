@@ -4,7 +4,9 @@ import { api, type VendorListing, type VendorProfile } from '../../shared/api/ap
 import AddHotelWizard from './AddHotelWizard';
 import AddCarWizard from './AddCarWizard';
 import AddTourWizard from './AddTourWizard';
-import HotelWorkspace, { LISTING_STATUS } from './HotelWorkspace';
+import HotelWorkspace, { LISTING_STATUS, type HotelTab } from './HotelWorkspace';
+import { PartnerDocuments, PartnerPaymentRequests } from './PartnerConsolePages';
+import { AiSuggestionTools, AssistantChat } from './AiTools';
 import VendorReservations from './VendorReservations';
 import SecurityPanel from '../account/SecurityPanel';
 import Inbox from '../messages/Inbox';
@@ -19,6 +21,8 @@ import PartnerCoupons from './PartnerCoupons';
 import BusinessProfile from './BusinessProfile';
 import { useReasonDialog } from '../../shared/components/ReasonDialog';
 import { PARTNER_AGREEMENT_VERSION } from '../../shared/utils/partner-agreement';
+
+const LISTING_SECTION: Partial<Record<VendorTab, HotelTab>> = { availability: 'availability', 'rooms-pricing': 'rooms', 'channel-manager': 'availability' };
 
 interface VendorDashboardProps { setView: (view: string) => void; userName: string; userEmail: string; onSignOut: () => Promise<void> }
 const toolButton = 'inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#D9DED8] bg-white px-3 text-sm font-semibold text-[#3D4A42] hover:bg-slate-50 disabled:opacity-50';
@@ -45,7 +49,9 @@ export default function VendorDashboard({ setView, userName, userEmail, onSignOu
   const [listingBusyId, setListingBusyId] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState<number>();
   const { askReason, dialog } = useReasonDialog();
-  const workspace = listings.find((item) => item.id === workspaceId) ?? null;
+  // Calendar, rooms and channel pages open one listing's workspace at that section; with one listing, open it straight away.
+  const section = LISTING_SECTION[tab];
+  const workspace = listings.find((item) => item.id === workspaceId) ?? (section && listings.length === 1 ? listings[0] : null);
   const word = vendor?.businessType === 'homestay' ? 'homestay' : vendor?.businessType === 'vehicle' ? 'car' : vendor?.businessType === 'tour_operator' ? 'tour' : 'hotel';
   const words = partnerWords(word);
   const typeLabel = (type: VendorListing['type']) => (type === 'homestay' ? 'Homestay' : type === 'car' ? 'Car' : type === 'tour' ? 'Tour' : 'Hotel');
@@ -103,7 +109,7 @@ export default function VendorDashboard({ setView, userName, userEmail, onSignOu
   };
 
   return (
-    <VendorWorkspace tab={tab} access={access} kind={word} badges={{ reservations: pendingCount, messages: unreadMessages }} onTab={navigate} hideHeading={tab === 'new-property' || Boolean(workspace && tab === 'properties')} businessName={vendor?.name} status={vendor?.status} userName={userName} userEmail={userEmail} onBrowse={() => setView('explore')} onSignOut={onSignOut}>
+    <VendorWorkspace tab={tab} access={access} kind={word} badges={{ reservations: pendingCount, messages: unreadMessages }} onTab={navigate} hideHeading={tab === 'new-property' || Boolean(workspace && (tab === 'properties' || section))} businessName={vendor?.name} status={vendor?.status} userName={userName} userEmail={userEmail} onBrowse={() => setView('explore')} onSignOut={onSignOut}>
       {loading ? <div className="flex min-h-64 items-center justify-center" role="status"><LoaderCircle className="size-7 animate-spin text-[#006F3C]" /><span className="sr-only">Loading your workspace</span></div>
         : loadError ? <div role="alert" className="rounded-xl border border-rose-200 bg-white p-6"><p className="text-sm text-rose-700">{loadError}</p><button type="button" onClick={() => setReload((value) => value + 1)} className="mt-4 min-h-11 rounded-lg border px-4 text-sm font-semibold">Try again</button></div> : <div className="space-y-6">
       {dialog}
@@ -131,6 +137,27 @@ export default function VendorDashboard({ setView, userName, userEmail, onSignOu
         {tab === 'reports' && canOpen(access, 'reports') && <VendorReports />}
         {tab === 'payouts' && canOpen(access, 'payouts') && <PartnerPayouts onBankDetails={canOpen(access, 'business') ? () => navigate('business') : undefined} />}
         {tab === 'team' && canOpen(access, 'team') && <HotelTeam />}
+        {tab === 'payment-requests' && canOpen(access, 'payment-requests') && <PartnerPaymentRequests />}
+        {tab === 'documents' && canOpen(access, 'documents') && <PartnerDocuments />}
+        {tab === 'ai-assistant' && <AssistantChat />}
+        {(tab === 'ai-pricing' || tab === 'ai-content') && canOpen(access, tab) && <AiSuggestionTools modes={tab === 'ai-pricing' ? ['pricing', 'reviews'] : ['content', 'reviews']}
+          onOpenPricing={(id) => { navigate('rooms-pricing'); setWorkspaceId(id); }} />}
+        {section && workspace && <HotelWorkspace key={`${workspace.id}-${tab}`} listing={workspace} initialTab={section} busy={listingBusyId === workspace.id}
+          onBack={() => { setWorkspaceId(null); setMessage(''); navigate('properties'); }}
+          onAvailability={(listing, action) => listingAction(listing, action)}
+          onChange={(updated, note) => { setListings((items) => items.map((item) => item.id === updated.id ? updated : item)); if (note) setMessage(note); }} />}
+        {section && !workspace && (listings.length === 0
+          ? <p className="rounded-2xl border border-dashed border-[#C9D3CC] bg-white p-10 text-center text-sm text-[#5B6B61]">No {words.one}s yet. Use “{word === 'car' ? 'Add vehicle' : word === 'tour' ? 'Create tour' : 'List new property'}” first.</p>
+          : <section aria-label={`Choose a ${words.one}`} className="space-y-3">
+            <p className="text-sm text-[#5B6B61]">Choose a {words.one}:</p>
+            <ul className="grid gap-3 sm:grid-cols-2">{listings.map((listing) => <li key={listing.id}>
+              <button type="button" onClick={() => setWorkspaceId(listing.id)} className="flex w-full items-center gap-3 rounded-xl border border-[#E3E7E2] bg-white p-3 text-left hover:border-[#006F3C]">
+                {listing.image ? <img src={listing.image} alt="" className="size-14 shrink-0 rounded-lg object-cover" /> : <span className="size-14 shrink-0 rounded-lg bg-[#E3E7E2]" />}
+                <span className="min-w-0"><span className="block truncate font-bold">{listing.title}</span><span className="text-xs text-[#5B6B61]">{LISTING_STATUS[listing.status][0]} · {listing.location}</span></span>
+                <ArrowRight className="ml-auto size-4 shrink-0 text-[#006F3C]" />
+              </button>
+            </li>)}</ul>
+          </section>)}
         {tab === 'new-property' && (() => {
           const done = (created: VendorListing, note: string) => {
             setListings((items) => [created, ...items.filter((item) => item.id !== created.id)]);

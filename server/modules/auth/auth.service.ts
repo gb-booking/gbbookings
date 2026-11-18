@@ -3,8 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Request } from 'express';
 import { connectDatabase } from '../../database/connection.js';
 import { SessionModel } from '../../models/session.model.js';
-import { UserModel, type UserRole } from '../../models/user.model.js';
-import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
+import { UserModel, staffRoles, type UserRole } from '../../models/user.model.js';import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
 import { env } from '../../config/env.js';
 import { createRefreshToken, hashToken, signAccessToken } from './auth.tokens.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
@@ -196,7 +195,7 @@ export async function loginUser(
  * Admins always use a code: one stolen password would otherwise control refunds, payouts and bank approvals.
  * Without email set up, a local install can still reach its admin; production never skips it.
  */
-const needsTwoStep = (user: any) => Boolean(user.twoFactor?.enabled) || (user.roles?.includes('admin') && (env.NODE_ENV === 'production' || isEmailConfigured()));
+const needsTwoStep = (user: any) => Boolean(user.twoFactor?.enabled) || (user.roles?.some((role: UserRole) => (staffRoles as readonly UserRole[]).includes(role)) && (env.NODE_ENV === 'production' || isEmailConfigured()));
 
 /** Tells the account holder about a sign-in from a browser this account hasn't used. A failed email never stops the sign-in. */
 async function alertIfNewDevice(user: any, metadata: SessionMetadata) {

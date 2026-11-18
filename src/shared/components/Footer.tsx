@@ -208,7 +208,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-white/10">
               <div className="flex flex-col space-y-2 text-xs pb-6 lg:pb-0 lg:pr-6">
                 <h5 className="text-white font-semibold text-xs uppercase tracking-wider">Payment</h5>
-                <p className="text-slate-300">Pay now by card or mobile wallet on Safepay's secure page, or pay the partner on arrival: when you check in, pick up the car or start the tour.</p>
+                <p className="text-slate-300">Pay the partner on arrival: when you check in, pick up the car or start the tour. Pay now online is coming soon.</p>
               </div>
 
               <div className="flex flex-col space-y-2 text-xs py-6 lg:py-0 lg:px-6">

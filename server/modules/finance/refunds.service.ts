@@ -20,7 +20,7 @@ async function sendOne(booking: any, refund: any, by?: string) {
   if (!claimed) return;
   const tracker = refund.tracker ?? booking.onlinePayment?.paidTracker;
   try {
-    if (!tracker) throw new Error('This booking has no paid Safepay payment on record.');
+    if (!tracker) throw new Error('This booking has no paid online payment on record.');
     await refundTracker(tracker, refund.amountMinor);
   } catch (error) {
     await BookingModel.updateOne({ _id: booking._id, 'refunds._id': refund._id }, { $set: { 'refunds.$.status': 'failed', 'refunds.$.lastError': String((error as Error)?.message ?? error).slice(0, 500) } });
@@ -79,10 +79,10 @@ async function refundFor(bookingId: string, refundId: string) {
 
 /** Admin retry through Safepay, after checking the Safepay dashboard that the money has not moved. */
 export async function retryRefund(adminId: string, bookingId: string, refundId: string) {
-  if (!autoRefundsEnabled()) throw new AppError(409, 'AUTO_REFUNDS_OFF', 'Sending through Safepay is switched off. Refund in the Safepay dashboard, then mark it sent.');
+  if (!autoRefundsEnabled()) throw new AppError(409, 'AUTO_REFUNDS_OFF', 'Sending through the payment provider is switched off. Refund in the payment provider dashboard, then mark it sent.');
   const { booking, refund } = await refundFor(bookingId, refundId);
-  if (refund.channel !== 'safepay') throw new AppError(409, 'REFUND_NOT_GATEWAY', 'The partner holds this money, so it cannot be sent through Safepay.');
-  if (!['pending', 'failed'].includes(refund.status)) throw new AppError(409, 'REFUND_NOT_RETRYABLE', refund.status === 'sent' ? 'This refund was already sent.' : 'The last attempt has no known result. Check the Safepay dashboard, then mark it sent if the money moved.');
+  if (refund.channel !== 'safepay') throw new AppError(409, 'REFUND_NOT_GATEWAY', 'The partner holds this money, so it cannot be sent through the payment provider.');
+  if (!['pending', 'failed'].includes(refund.status)) throw new AppError(409, 'REFUND_NOT_RETRYABLE', refund.status === 'sent' ? 'This refund was already sent.' : 'The last attempt has no known result. Check the payment provider dashboard, then mark it sent if the money moved.');
   await sendOne(booking, refund, adminId);
   return (await listRefunds('open')).find((item) => item.id === refundId) ?? { id: refundId, status: 'sent' };
 }

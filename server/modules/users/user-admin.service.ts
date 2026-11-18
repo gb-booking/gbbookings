@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { connectDatabase } from '../../database/connection.js';
-import { UserModel, type UserRole } from '../../models/user.model.js';
+import { UserModel, staffRoles, type StaffRole, type UserRole } from '../../models/user.model.js';
+import { CustomRoleModel } from '../../models/console.models.js';
 import { AppError, ServiceUnavailableError } from '../../shared/app-error.js';
 import { escapeRegex } from '../../shared/escape-regex.js';
 import { recordAuditEvent } from '../audit/audit.service.js';
@@ -9,7 +10,7 @@ import { revokeAllSessions, type SessionMetadata } from '../auth/auth.service.js
 import { requestPasswordReset } from '../auth/account-recovery.service.js';
 import { isEmailConfigured } from '../email/resend.service.js';
 
-const privilegedRoles: UserRole[] = ['admin'];
+const privilegedRoles: readonly UserRole[] = staffRoles;
 
 async function requireDatabase() {
   if (!await connectDatabase()) throw new ServiceUnavailableError('User administration is unavailable while the database is disconnected.');
@@ -30,7 +31,7 @@ function serializeAdminUser(user: any) {
 
 export async function createStaffAccount(
   actor: { userId: string; roles: UserRole[] },
-  input: { name: string; email: string; role: 'admin' },
+  input: { name: string; email: string; role: StaffRole; customRoleId?: string },
   metadata: SessionMetadata,
 ) {
   await requireDatabase();
@@ -38,11 +39,13 @@ export async function createStaffAccount(
     throw new AppError(403, 'PERMISSION_DENIED', 'Only a platform admin can create staff accounts.');
   }
   if (!isEmailConfigured()) throw new ServiceUnavailableError('Configure Resend before inviting staff.');
+  const customRole = input.role === 'custom_staff' ? await CustomRoleModel.findOne({ publicId: input.customRoleId, status: 'active' }).select('_id').lean() as any : undefined;
+  if (input.role === 'custom_staff' && !customRole) throw new AppError(404, 'ROLE_NOT_FOUND', 'That custom role does not exist or is disabled.');
   let user: any;
   try {
     // No shared/default password. The recipient sets their own password through a one-time email link.
     user = await UserModel.create({
-      name: input.name, email: input.email, roles: [input.role],
+      name: input.name, email: input.email, roles: [input.role], ...(customRole ? { customRoleId: customRole._id } : {}),
       passwordHash: await bcrypt.hash(randomBytes(48).toString('base64url'), 12),
     });
   } catch (error) {
@@ -62,7 +65,7 @@ export async function listUsers(query: { status?: string; role?: string; search?
   await requireDatabase();
   const filter: Record<string, unknown> = { deletedAt: null };
   if (query.status) filter.status = query.status;
-  if (query.role) filter.roles = query.role;
+  if (query.role) filter.roles = query.role === 'staff' ? { $in: staffRoles } : query.role;
   if (query.search) {
     const pattern = new RegExp(escapeRegex(query.search), 'i');
     filter.$or = [{ email: pattern }, { name: pattern }];
@@ -85,7 +88,7 @@ export async function changeUserStatus(
   if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User was not found.');
   if (String(user._id) === actor.userId) throw new AppError(409, 'CANNOT_MODIFY_SELF', 'You cannot change the status of your own account.');
   if (user.roles.some((role: UserRole) => privilegedRoles.includes(role)) && !actor.roles.includes('admin')) {
-    throw new AppError(403, 'PERMISSION_DENIED', 'Only a platform admin can change another administrator.');
+    throw new AppError(403, 'PERMISSION_DENIED', 'Only the Super Admin can change a staff account.');
   }
 
   if (input.action === 'verify_email') {
