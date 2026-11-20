@@ -26,7 +26,9 @@ export async function createOtpChallenge(input: {
   requestedIp?: string;
 }) {
   const publicId = `otp_${randomUUID()}`;
-  const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+  // TESTING ONLY: every security code is 123123. Restore the random line below before real users sign up.
+  // const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+  const code = '123123';
   await OtpChallengeModel.updateMany(
     { ...(input.userId ? { userId: input.userId } : { destination: input.destination }), purpose: input.purpose, consumedAt: null },
     { $set: { consumedAt: new Date() } },
