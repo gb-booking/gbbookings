@@ -3,7 +3,7 @@ import { toast } from '../../shared/components/Toaster';
 import BookingsPanel from './BookingsPanel';
 import SupportPanel from './SupportPanel';
 import { BookOpenCheck, LifeBuoy, Banknote, Undo2, AlertTriangle, Building2, CalendarX, CheckCircle2, XCircle, Car, Percent, Hotel, House, Inbox, LayoutDashboard, Mountain, PanelLeftClose, PanelLeftOpen, Search, FileText, LoaderCircle, LogOut, ShieldCheck, Star, Users,
-  BarChart3, Bell, Bot, Compass, Contact, Fingerprint, Gift, History, Image, KeyRound, ListChecks, ListTodo, MapPin, Megaphone, Receipt, RefreshCw, ScrollText, Shield, ShieldAlert, Sparkles, UserCog, Workflow } from 'lucide-react';
+  BarChart3, Bell, Bot, Compass, Contact, Fingerprint, Gift, History, Image, KeyRound, ListChecks, ListTodo, MapPin, Megaphone, Receipt, RefreshCw, ScrollText, Shield, ShieldAlert, UserCog, Workflow } from 'lucide-react';
 import { RefundsPanel, PayoutsPanel } from './FinancePanels';
 import { AuditPanel, FeatureAuditPanel, PermissionsPanel, ROLE_NAMES } from './ConsolePanels';
 import { AiCenterPage, AiControlPage, AiSupportPage, AutomationsPage, ChannelFeedsPage, CustomRolesPage, CustomersPage, DestinationsPage, ForecastPage, FraudPage, GuidesPage, MarketingPage, MediaPage, NotificationsPage, PaymentRequestsPage, ReportsPage, SecurityCenterPage, TasksPage } from './ConsolePages';
@@ -52,7 +52,7 @@ const MENUS: Record<StaffRole, NavGroup[]> = {
     { title: 'Bookings', items: [{ id: 'bookings', label: 'All bookings', icon: BookOpenCheck }, { id: 'support', label: 'Support', icon: LifeBuoy }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
     { title: 'People', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'customers', label: 'Customers', icon: Users }, { id: 'staff', label: 'Staff', icon: UserCog }, { id: 'users', label: 'All users', icon: Users }, { id: 'reviews', label: 'Guest reviews', icon: Star }, nav('crm', 'CRM', Contact), nav('loyalty', 'Loyalty', Gift)] },
     { title: 'Money', items: [{ id: 'settings', label: 'Commission & fees', icon: Percent }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'payouts', label: 'Payouts', icon: Banknote }, nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert)] },
-    { title: 'Growth', items: [nav('reports', 'Reports', BarChart3), nav('marketing', 'Marketing', Megaphone), nav('ai-center', 'AI center', Sparkles), nav('ai-control', 'AI control center', Bot)] },
+    { title: 'Growth', items: [nav('reports', 'Reports', BarChart3), nav('marketing', 'Marketing', Megaphone), nav('ai-center', 'AI center', Bot), nav('ai-control', 'AI control center', Bot)] },
     { title: 'Platform', items: [
       { id: 'permissions', label: 'Permissions', icon: KeyRound }, nav('custom-roles', 'Custom roles', UserCog), { id: 'audit', label: 'Audit logs', icon: ScrollText },
       { id: 'security-log', label: 'Security log', icon: Fingerprint }, nav('security-center', 'Security center', Shield), nav('automation', 'Automation center', Workflow),
@@ -65,17 +65,17 @@ const MENUS: Record<StaffRole, NavGroup[]> = {
     { title: 'Products', items: PRODUCT_ITEMS },
     { title: 'Bookings', items: [{ id: 'bookings', label: 'Bookings', icon: BookOpenCheck }, { id: 'support', label: 'Complaints & messages', icon: LifeBuoy }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
     { title: 'Partners', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'reviews', label: 'Reviews', icon: Star }] },
-    { title: 'Work', items: [NOTIFICATIONS, nav('payment-requests', 'Payment requests', Receipt), TASKS, nav('reports', 'Reports', BarChart3), nav('ai-assistant', 'AI assistant', Sparkles)] },
+    { title: 'Work', items: [NOTIFICATIONS, nav('payment-requests', 'Payment requests', Receipt), TASKS, nav('reports', 'Reports', BarChart3), nav('ai-assistant', 'AI assistant', Bot)] },
     { title: 'You', items: [ACTIVITY, ACCOUNT] },
   ],
   finance_manager: [
     { title: 'Money', items: [{ id: 'payouts', label: 'Payout control center', icon: Banknote }, { id: 'transactions', label: 'Transactions', icon: BookOpenCheck }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'settings', label: 'Commission & fees', icon: Percent }] },
-    { title: 'Review', items: [nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert), nav('reports', 'Reports', BarChart3), nav('ai-forecast', 'AI forecast', Sparkles)] },
+    { title: 'Review', items: [nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert), nav('reports', 'Reports', BarChart3), nav('ai-forecast', 'AI forecast', Bot)] },
     { title: 'You', items: [NOTIFICATIONS, TASKS, ACTIVITY, ACCOUNT] },
   ],
   support_agent: [
     { title: 'Support', items: [{ id: 'support', label: 'Tickets & messages', icon: LifeBuoy }, { id: 'transactions', label: 'Bookings', icon: BookOpenCheck }] },
-    { title: 'Tools', items: [NOTIFICATIONS, nav('crm', 'CRM', Contact), nav('ai-support', 'AI support', Sparkles), TASKS] },
+    { title: 'Tools', items: [NOTIFICATIONS, nav('crm', 'CRM', Contact), nav('ai-support', 'AI support', Bot), TASKS] },
     { title: 'You', items: [ACCOUNT] },
   ],
 };

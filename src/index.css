@@ -644,3 +644,41 @@ html, body {
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(100px); }
 }
+
+/* Keep the original floating search console clear of the global spacing helpers. */
+#explore-section > #hero-banner {
+  margin-bottom: 0;
+}
+
+#explore-section > #search-console {
+  margin-top: -3.5rem !important;
+}
+
+/* Reference hover menu: a six-pixel slide, 150ms fade, and a pointer bridge. */
+.navbar-mega-menu { animation: navbar-menu-in 150ms ease-out both; transform-origin: top center; }
+.navbar-mega-menu::before { content: ""; position: absolute; top: -24px; left: 0; right: 0; height: 24px; }
+.navbar-mega-menu[data-state="closing"] { animation: navbar-menu-out 150ms ease-in both; }
+.navbar-mega-menu > div { max-height: calc(100dvh - 132px); overflow-y: auto; overscroll-behavior: contain; }
+
+/* The original category pages share the same overlapping hero/search layout. */
+.legacy-catalog-hero:has(+ .legacy-search-console) { margin-bottom: 0 !important; }
+.legacy-catalog-hero + .legacy-search-console { margin-top: -3.5rem !important; }
+.legacy-catalog-hero h1 > span { color: #00A651; font-weight: 900; }
+@media (max-width: 768px) {
+  .legacy-catalog-hero { max-height: none !important; }
+}
+@keyframes navbar-menu-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes navbar-menu-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+/* The hero may grow when text wraps or the visitor increases their font size. */
+@media (max-width: 768px) {
+  #explore-section > #hero-banner {
+    max-height: none !important;
+  }
+}

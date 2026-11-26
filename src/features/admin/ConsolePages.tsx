@@ -114,7 +114,7 @@ export function PaymentRequestsPage() {
 }
 
 /* ───────── Fraud review ───────── */
-const RISK_TONE = { low: 'text-emerald-700', medium: 'text-amber-700', high: 'text-rose-700', critical: 'text-rose-900 font-bold' };
+const RISK_TONE = { low: 'text-emerald-700', medium: 'text-amber-700', high: 'text-rose-700', critical: 'text-rose-900 font-semibold' };
 export function FraudPage() {
   const { value, error, reload } = useLoad(() => api.console.fraudCases());
   const { askReason, dialog } = useReasonDialog();

@@ -7,19 +7,19 @@ export default function ListingCard({ listing, onSelect, tag, detailed = false }
 }) {
   const perNight = listing.type === 'hotel' || listing.type === 'homestay';
   return (
-    <article onClick={onSelect} className="cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-emerald-400 hover:shadow-md">
+    <article onClick={onSelect} className="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm transition duration-300 hover:border-emerald-500/60 hover:shadow-lg">
       <div className={`relative overflow-hidden bg-slate-100 ${detailed ? 'aspect-[16/10]' : 'aspect-[4/3]'}`}>
-        <img src={listing.image} alt={listing.title} className="h-full w-full object-cover transition duration-300 hover:scale-105" onError={handleImageError} />
+        <img src={listing.image} alt={listing.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" onError={handleImageError} />
         {tag && <span className="absolute left-3 top-3 rounded-md bg-white/90 px-2 py-0.5 text-xs font-medium capitalize text-slate-800">{tag}</span>}
       </div>
-      <div className={detailed ? 'space-y-2.5 p-4' : 'space-y-2 p-3'}>
+      <div className={detailed ? 'space-y-2.5 p-4 sm:p-5' : 'space-y-2.5 p-4'}>
         <div className="flex items-center justify-between gap-3 text-xs">
           <span className="flex min-w-0 items-center gap-1 truncate text-slate-500"><MapPin className="h-3.5 w-3.5 shrink-0" /> {listing.location}</span>
           <span className="flex items-center gap-1 font-semibold text-slate-800">
             {listing.rating ? <><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {listing.rating}</> : <span className="text-[#006F3C]">New</span>}
           </span>
         </div>
-        <h3 className={`font-semibold text-slate-950 ${detailed ? 'line-clamp-2' : 'line-clamp-1 text-sm'}`}>{listing.title}</h3>
+        <h3 className={`font-bold text-slate-950 transition-colors group-hover:text-[#006F3C] ${detailed ? 'line-clamp-2' : 'line-clamp-1 text-base'}`}>{listing.title}</h3>
         {listing.hotelSpecs?.stars ? <p className="text-xs font-medium text-slate-600" aria-label={`${listing.hotelSpecs.stars} star hotel`}><span aria-hidden="true" className="text-amber-500">{'★'.repeat(listing.hotelSpecs.stars)}</span> {listing.hotelSpecs.stars}-star hotel</p> : null}
         {detailed && <p className="line-clamp-2 text-xs leading-relaxed text-slate-600">{listing.description}</p>}
         {detailed && listing.type === 'car' && listing.carSpecs && (

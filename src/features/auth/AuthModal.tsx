@@ -108,7 +108,7 @@ export default function AuthModal({ onClose, initialMode = 'signin' }: AuthModal
 
   const finish = (user: AuthUser, greeting: 'new' | 'back' | 'neutral') => {
     const first = user.name.split(/\s+/)[0];
-    flashToast(greeting === 'new' ? `Welcome to GBBookings, ${first}! Your account is ready.` : greeting === 'back' ? `Welcome back, ${first}!` : `Welcome, ${first}!`);
+    flashToast(greeting === 'new' ? `Your account is ready, ${first}` : `Signed in as ${first}`);
     // A fresh load, so every screen starts as this user. The page and any checkout in progress are kept.
     window.location.reload();
   };
@@ -164,7 +164,7 @@ export default function AuthModal({ onClose, initialMode = 'signin' }: AuthModal
   const title = challengeId
     ? otpPurpose === 'signup' ? 'Verify your email' : 'Enter security code'
     : mode === 'forgot' ? 'Reset your password'
-      : isSignIn ? (isRtl ? 'لاگ ان کریں' : 'Welcome back') : (isRtl ? 'نیا اکاؤنٹ بنائیں' : 'Create your account');
+      : isSignIn ? (isRtl ? 'لاگ ان کریں' : 'Sign in') : (isRtl ? 'نیا اکاؤنٹ بنائیں' : 'Create your account');
 
   return (
     <div className="fixed inset-0 z-100 flex items-end sm:items-center justify-center sm:p-4">

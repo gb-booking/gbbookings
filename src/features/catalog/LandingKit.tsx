@@ -14,6 +14,10 @@ import {
   MapPin,
   Search,
   Star,
+  ShieldCheck,
+  Headset,
+  Wallet,
+  Compass,
   type LucideIcon,
 } from "lucide-react";
 import { handleImageError, type Listing, type ListingType } from "../../types";
@@ -84,7 +88,7 @@ export function LandingHero({
 }) {
   return (
     <section
-      className="relative w-full rounded-2xl mt-0 sm:mt-1 overflow-hidden min-h-[280px] sm:min-h-[320px] lg:min-h-[350px] shadow-md"
+      className="legacy-catalog-hero relative w-full rounded-2xl sm:rounded-3xl mt-0 sm:mt-1 overflow-hidden min-h-[280px] sm:min-h-[320px] lg:min-h-[350px] shadow-xl"
       id={`${id}-hero-banner`}>
       <div className="absolute inset-0 z-0">
         <img
@@ -101,15 +105,18 @@ export function LandingHero({
       <div className="relative z-10 max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 pt-6 sm:pt-10 md:pt-14 pb-16 sm:pb-20 flex flex-col items-start text-left">
         <div className="lg:w-10/12 space-y-3 sm:space-y-3.5">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-slate-900/80 border border-white/30 text-white text-[11px] sm:text-xs backdrop-blur-md shadow-md">
-            <Icon className="w-3.5 h-3.5 text-[#006F3C] shrink-0" />
+            <Icon className="w-3.5 h-3.5 text-[#00A651] shrink-0" />
             <span className="tracking-tight font-medium">{eyebrow}</span>
           </div>
-          <h1 className="text-xl sm:text-3xl lg:text-4xl font-semibold text-white tracking-tight leading-snug drop-shadow-md">
+          <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-snug drop-shadow-md">
             {title}
           </h1>
           <p className="text-slate-100/95 text-xs sm:text-sm font-medium max-w-xl leading-relaxed drop-shadow-xs">
             {subtitle}
           </p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-xs font-bold text-white">
+            {[{ icon: Compass, label: 'Explore Gilgit Baltistan' }, { icon: ShieldCheck, label: 'Local partners' }, { icon: Headset, label: 'Travel support' }].map(({ icon: TrustIcon, label }) => <span key={label} className="flex items-center gap-1.5"><span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#00A651]/70 bg-[#00A651]/30"><TrustIcon className="size-3" /></span>{label}</span>)}
+          </div>
         </div>
       </div>
     </section>
@@ -139,10 +146,10 @@ export function SearchConsole({
   };
   return (
     <section
-      className="-mt-12 sm:-mt-14 relative z-20 w-full"
+      className="legacy-search-console -mt-12 sm:-mt-14 relative z-20 w-full"
       id={`${id}-search-console`}>
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-lg">
-        <div className="flex border-b border-[#F1F5F9] bg-[#FAFAFA] px-6 sm:px-8 rounded-t-2xl">
+      <div className="bg-white rounded-3xl border border-[#E2E8F0] shadow-xl">
+        <div className="flex border-b border-[#F1F5F9] bg-[#FAFAFA] px-6 sm:px-8 rounded-t-3xl">
           <div className="flex items-center gap-2.5 py-4 px-1 border-b-2 border-[#006F3C] text-[#006F3C] font-bold text-sm">
             <Icon className="w-4 h-4" />
             <span>{title}</span>
@@ -150,7 +157,7 @@ export function SearchConsole({
         </div>
         <form
           onSubmit={submit}
-          className="p-4 sm:p-6 bg-slate-50/50 rounded-b-2xl">
+          className="p-4 sm:p-6 bg-slate-50/50">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-3.5 items-stretch relative">
             {children}
             <div className="lg:col-span-2 flex items-stretch">
@@ -163,9 +170,17 @@ export function SearchConsole({
             </div>
           </div>
         </form>
+        <CatalogAssurances />
       </div>
     </section>
   );
+}
+
+/** Original assurance-strip layout, without demonstration prices or statistics. */
+export function CatalogAssurances() {
+  return <div className="grid grid-cols-1 divide-y divide-slate-200/80 rounded-b-3xl border-t border-slate-200/80 bg-slate-50/80 px-3 py-2 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
+    {[{ icon: ShieldCheck, title: 'Local partners', text: 'Listings from across the region' }, { icon: Compass, title: 'Everything in one place', text: 'Stays, cars and experiences' }, { icon: Wallet, title: 'Pay on arrival', text: 'Where offered by the partner' }, { icon: Headset, title: 'Booking support', text: 'Help with your travel plans' }].map(({ icon: Icon, title, text }) => <div key={title} className="flex items-center gap-3 px-3 py-3 sm:px-4"><span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#006F3C]/20 bg-[#006F3C]/10 text-[#006F3C]"><Icon className="size-5" /></span><div><p className="text-[13px] font-bold text-slate-800">{title}</p><p className="mt-0.5 text-xs leading-relaxed text-slate-500">{text}</p></div></div>)}
+  </div>;
 }
 
 const fieldBox =

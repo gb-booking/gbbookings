@@ -29,8 +29,8 @@ interface CheckoutFlowProps {
 }
 type Step = 'details' | 'review' | 'receipt';
 
-const inputClass = 'mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal outline-none focus:border-[#006F3C] focus:ring-2 focus:ring-[#006F3C]/15';
-const buttonClass = 'min-h-11 rounded-lg bg-[#006F3C] px-5 text-sm font-semibold text-white hover:bg-[#005C32] disabled:opacity-50';
+const inputClass = 'mt-1.5 min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-normal text-slate-900 outline-none transition-colors focus:bg-white focus:border-[#006F3C] focus:ring-2 focus:ring-[#006F3C]/15';
+const buttonClass = 'min-h-12 rounded-xl bg-[#006F3C] px-5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#005C32] disabled:opacity-50';
 const CANCELLATION_NOTE = 'Free cancellation until the day before check-in.';
 const CAR_CANCELLATION_NOTE = 'Free cancellation until the day before pickup.';
 const TOUR_CANCELLATION_NOTE = 'Free cancellation until the day before the tour starts.';
@@ -160,18 +160,18 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
   const confirmedNow = instant && !payNow;
 
   return (
-    <div id="checkout-flow-component" className="mx-auto max-w-5xl space-y-6 px-4 pb-24">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div id="checkout-flow-component" className="mx-auto max-w-6xl space-y-6 sm:space-y-8 px-0 sm:px-4 pb-24 animate-fadeIn">
+      <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between">
         <button disabled={busy} type="button" onClick={step === 'details' ? onCancel : () => { setStep('details'); checkoutKey.current = crypto.randomUUID(); }} className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-950"><ArrowLeft className="size-4" />{step === 'details' ? 'Back to property' : 'Edit your details'}</button>
         <Steps current={step} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="grid gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="space-y-4">
           {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</p>}
 
-          {step === 'details' && <form onSubmit={review} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-            <div><h1 className="text-xl font-bold text-slate-950">{tour ? 'Who’s travelling?' : car ? 'Who’s renting?' : 'Who’s checking in?'}</h1><p className="mt-1 text-sm text-slate-500">{tour ? 'The tour partner uses these details to confirm your place and meet you.' : car ? 'The partner uses these details to confirm the rental and arrange pickup.' : 'The property uses these details to confirm your stay.'}</p></div>
+          {step === 'details' && <form onSubmit={review} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-8 shadow-sm">
+            <div><h1 className="text-xl font-extrabold uppercase tracking-tight text-slate-950">{tour ? 'Who’s travelling?' : car ? 'Who’s renting?' : 'Who’s checking in?'}</h1><p className="mt-1 text-sm text-slate-500">{tour ? 'The tour partner uses these details to confirm your place and meet you.' : car ? 'The partner uses these details to confirm the rental and arrange pickup.' : 'The property uses these details to confirm your stay.'}</p></div>
             <label className="block text-sm font-semibold text-slate-800">Full name<input id="checkout-name" required minLength={2} maxLength={120} autoComplete="name" className={inputClass} value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></label>
             <div className="grid gap-5 sm:grid-cols-2">
               <label className="block text-sm font-semibold text-slate-800">Email address<input id="checkout-email" required type="email" autoComplete="email" className={inputClass} value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /><span className="mt-1 block text-xs font-normal text-slate-500">Your confirmation is sent here.</span></label>
@@ -189,9 +189,9 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
             <button id="btn-checkout-review" disabled={busy} className={buttonClass + ' flex w-full items-center justify-center gap-2'}>{busy && <LoaderCircle className="size-4 animate-spin" />}{busy ? 'Checking availability…' : 'Continue to review'}</button>
           </form>}
 
-          {step === 'review' && <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+          {step === 'review' && <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-8 shadow-sm">
             {alreadyBooked && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">You already have booking {alreadyBooked} here on overlapping dates. Continue only if you want another one.</p>}
-            <div><h1 className="text-xl font-bold text-slate-950">{confirmedNow ? 'Review and book' : 'Review and request'}</h1><p className="mt-1 text-sm text-slate-500">{confirmedNow ? 'Check everything before you book.' : 'Check everything before you send the request.'}</p></div>
+            <div><h1 className="text-xl font-extrabold uppercase tracking-tight text-slate-950">{confirmedNow ? 'Review and book' : 'Review and request'}</h1><p className="mt-1 text-sm text-slate-500">{confirmedNow ? 'Check everything before you book.' : 'Check everything before you send the request.'}</p></div>
             {quoteChanged && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">The price was updated by the property since you selected the room. The total below is the current price.</p>}
             <dl className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
               <ReviewRow label="Guest">{contact.name}<span className="block text-slate-500">{contact.email} · {contact.phone}</span></ReviewRow>
@@ -237,9 +237,9 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
         </div>
 
         <aside className="lg:sticky lg:top-28" aria-label={tour ? 'Your tour' : car ? 'Your rental' : 'Your stay'}>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <img src={listing.image} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="aspect-[16/9] w-full object-cover" />
-            <div className="space-y-4 p-5">
+            <div className="space-y-5 p-5 sm:p-6">
               <div><h2 className="font-bold text-slate-950">{listing.title}</h2><p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin className="size-3.5 shrink-0" />{listing.location}</p></div>
               <ul className="space-y-2 border-y border-slate-100 py-4 text-sm text-slate-700">
                 <li className="flex gap-2"><CalendarDays className="mt-0.5 size-4 shrink-0 text-slate-400" /><span>{formatDateForDisplay(params.startDate)} → {formatDateForDisplay(params.endDate)} <span className="text-slate-500">· {plural(nights, dayWord)}</span></span></li>
@@ -255,7 +255,7 @@ export default function CheckoutFlow({ bookingParams: params, listing, userEmail
                 {mealCost > 0 && <div className="flex justify-between text-slate-600"><span>Meals ({params.meals!.map(mealLabel).join(', ')})</span><span>PKR {mealCost.toLocaleString()}</span></div>}
                 {coupon && <div className="flex justify-between text-emerald-700"><span>Promo {coupon.code}</span><span>−PKR {coupon.discount.toLocaleString()}</span></div>}
                 {charges.map((line) => <div key={line.name} className="flex justify-between text-slate-600"><span>{line.name}</span><span>PKR {line.amount.toLocaleString()}</span></div>)}
-                <div className="flex justify-between border-t border-slate-100 pt-3 text-base font-bold text-slate-950"><span>Total</span><span>PKR {quote.toLocaleString()}</span></div>
+                <div className="flex flex-wrap justify-between gap-2 border-t border-dashed border-slate-300 pt-4 text-xl font-extrabold text-slate-950"><span>Total</span><span>PKR {quote.toLocaleString()}</span></div>
                 <p className="text-xs text-slate-500">{payNow ? 'Paid now, online.' : tour ? 'Paid at the start of the tour.' : car ? 'Paid at pickup.' : 'Paid at the property on arrival.'}</p>
               </div>
               <p className="flex items-start gap-2 rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-900"><ShieldCheck className="size-4 shrink-0" />{payNow ? <>Secure payment by Safepay. See our <a href="/refunds" className="underline">refund policy</a>.</> : <>No payment today. {cancellationNote}</>}</p>
@@ -271,11 +271,11 @@ function Steps({ current }: { current: Step }) {
   const steps: Array<[Step, string]> = [['details', 'Your details'], ['review', 'Review'], ['receipt', 'Confirmed']];
   const currentIndex = steps.findIndex(([id]) => id === current);
   return (
-    <ol className="flex items-center gap-2 text-xs font-semibold sm:gap-3" aria-label="Checkout progress">
+    <ol className="flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-xs font-bold shadow-xs sm:w-auto sm:gap-3" aria-label="Checkout progress">
       {steps.map(([id, text], index) => (
         <li key={id} className="flex items-center gap-2 sm:gap-3" aria-current={id === current ? 'step' : undefined}>
-          <span className={`flex size-6 items-center justify-center rounded-full ${index < currentIndex ? 'bg-[#006F3C] text-white' : index === currentIndex ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500'}`}>{index < currentIndex ? <Check className="size-3.5" /> : index + 1}</span>
-          <span className={`hidden sm:inline ${index === currentIndex ? 'text-slate-900' : 'text-slate-500'}`}>{text}</span>
+          <span className={`flex size-8 shrink-0 items-center justify-center rounded-full transition-all ${index < currentIndex ? 'bg-[#006F3C] text-white' : index === currentIndex ? 'bg-[#006F3C] text-white shadow-md ring-2 ring-emerald-100' : 'bg-slate-200 text-slate-500'}`}>{index < currentIndex ? <Check className="size-3.5" /> : index + 1}</span>
+          <span className={`hidden min-[400px]:inline ${index === currentIndex ? 'text-slate-900' : 'text-slate-500'}`}>{text}</span>
           {index < steps.length - 1 && <span className="h-px w-4 bg-slate-300 sm:w-8" aria-hidden="true" />}
         </li>
       ))}
@@ -302,15 +302,15 @@ function Receipt({ booking, onDone }: { booking: Booking; onDone: () => void }) 
   const payment = booking.refund ? `Paid · refund of PKR ${booking.refund.amount.toLocaleString()} (${booking.refund.percent}%) ${refundSent ? 'sent' : 'on its way'}` : booking.paymentStatus === 'paid' ? 'Paid' : booking.status === 'cancelled' ? 'Nothing to pay — reservation cancelled' : `Pay on arrival: PKR ${booking.totalPrice.toLocaleString()} ${tour ? 'at the start of the tour' : rental ? 'at pickup' : 'at check-in'}`;
 
   return (
-    <div id="checkout-flow-component" className="mx-auto max-w-2xl space-y-6 px-4 pb-24">
+    <div id="checkout-flow-component" className="mx-auto max-w-2xl space-y-8 px-0 sm:px-4 pb-24 animate-fadeIn">
       <div className="text-center print:hidden">
         <CheckCircle className="mx-auto size-12 text-[#006F3C]" />
         <h1 className="mt-3 text-2xl font-bold text-slate-950">{pending ? `Request sent — your ${tour ? 'seats are' : rental ? 'car is' : 'room is'} held` : `Reservation ${booking.status.replace('_', '-')}`}</h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">{pending ? `The property will review your request. We’ll email ${booking.customerEmail} as soon as it’s confirmed.${booking.respondBy ? ` If the property hasn’t replied by ${new Date(booking.respondBy).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}, the request expires automatically.` : ''}` : 'Your reservation details are below.'}</p>
       </div>
 
-      <section id="printable-ticket-receipt" className="overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label={paid ? 'Payment receipt' : 'Reservation voucher'}>
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 px-6 py-4 text-white">
+      <section id="printable-ticket-receipt" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg print:shadow-none" aria-label={paid ? 'Payment receipt' : 'Reservation voucher'}>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0F172A] px-5 sm:px-6 py-5 text-white">
           <div><p className="text-xs uppercase tracking-widest text-slate-400">{paid ? 'Payment receipt · ' : ''}Booking reference</p><p className="mt-0.5 font-mono text-lg font-bold">{reference}</p></div>
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusTone[booking.status]}`}>{pending ? 'Awaiting confirmation' : booking.status.replace('_', '-')}</span>

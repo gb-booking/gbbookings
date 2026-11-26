@@ -15,11 +15,11 @@ interface CarsSectionProps {
 }
 
 const CATEGORIES: LandingCategory[] = [
-  { id: 'SUV', title: '4x4 Mountain SUVs', subtitle: 'Land Cruiser & Prado for rough terrain', icon: Car, bgImage: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40' },
-  { id: 'Jeep', title: 'Mountain Jeeps', subtitle: 'Deosai, Shandur & Fairy Meadows tracks', icon: Gauge, bgImage: 'https://images.unsplash.com/photo-1606016159991-dfe4f974be5c?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-blue-500/20 text-blue-400 border-blue-400/40' },
-  { id: 'Van', title: 'Executive Vans', subtitle: 'Hiace Grand Cabin for group tours', icon: Users, bgImage: 'https://images.unsplash.com/photo-1520050206274-a1ae446cb3cc?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-purple-500/20 text-purple-400 border-purple-400/40' },
-  { id: 'Hatchback', title: 'Budget Hatchbacks', subtitle: 'Economical city & local road drives', icon: Fuel, bgImage: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-amber-500/20 text-amber-400 border-amber-400/40' },
-  { id: 'Sedan', title: 'Highway Sedans', subtitle: 'Smooth, stylish Honda Civic & Corollas', icon: Car, bgImage: 'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-cyan-500/20 text-cyan-400 border-cyan-400/40' },
+  { id: 'SUV', title: '4x4 Mountain SUVs', subtitle: 'Land Cruiser and Prado for rough roads', icon: Car, bgImage: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40' },
+  { id: 'Jeep', title: 'Mountain Jeeps', subtitle: 'Deosai, Shandur and Fairy Meadows tracks', icon: Gauge, bgImage: 'https://images.unsplash.com/photo-1606016159991-dfe4f974be5c?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-blue-500/20 text-blue-400 border-blue-400/40' },
+  { id: 'Van', title: 'Executive Vans', subtitle: 'Hiace Grand Cabin for groups', icon: Users, bgImage: 'https://images.unsplash.com/photo-1520050206274-a1ae446cb3cc?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-purple-500/20 text-purple-400 border-purple-400/40' },
+  { id: 'Hatchback', title: 'Budget Hatchbacks', subtitle: 'Small cars for town and paved roads', icon: Fuel, bgImage: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-amber-500/20 text-amber-400 border-amber-400/40' },
+  { id: 'Sedan', title: 'Highway Sedans', subtitle: 'Civic and Corolla for the Karakoram Highway', icon: Car, bgImage: 'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-cyan-500/20 text-cyan-400 border-cyan-400/40' },
 ];
 
 const VEHICLE_TYPES = ['4x4 SUV', 'Prado', 'Van', 'Sedan', 'Hatchback'];
@@ -46,9 +46,9 @@ export default function CarsSection({ onSelectListing, onTriggerSearch }: CarsSe
         image="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=2000&q=80"
         alt="Toyota Land Cruiser 4x4 Mountain Drive"
         icon={Car}
-        eyebrow="Rugged 4x4 & Luxury Chauffeur Fleet"
-        title={<>Rent Premium 4x4 Vehicles in <span className="text-emerald-300">Gilgit Baltistan</span></>}
-        subtitle="Explore Deosai, Khunjerab Pass & Babusar Top with insured 4x4 SUVs, experienced mountain drivers & zero hidden fees."
+        eyebrow="Your Adventure Starts Here"
+        title={<>4x4 Jeeps &amp; Car Rentals in <span className="text-emerald-300">Gilgit Baltistan</span></>}
+        subtitle="Land Cruisers, Prados, jeeps and vans for Deosai, Khunjerab Pass and Babusar Top"
       />
 
       <SearchConsole
@@ -73,7 +73,7 @@ export default function CarsSection({ onSelectListing, onTriggerSearch }: CarsSe
           {(close) => (
             <Popover>
               <div>
-                <p className="text-xs font-bold text-slate-800 mb-2">Select Vehicle Type</p>
+                <p className="text-xs font-bold text-slate-800 mb-2">Vehicle type</p>
                 <div className="grid grid-cols-2 gap-2">
                   {VEHICLE_TYPES.map((type) => (
                     <button
@@ -89,7 +89,7 @@ export default function CarsSection({ onSelectListing, onTriggerSearch }: CarsSe
               </div>
               <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-slate-800">Chauffeur Service</p>
+                  <p className="text-xs font-bold text-slate-800">Chauffeur service</p>
                   <p className="text-[10px] text-slate-500">Includes experienced local driver</p>
                 </div>
                 <button
@@ -111,7 +111,7 @@ export default function CarsSection({ onSelectListing, onTriggerSearch }: CarsSe
 
       <CategoryGrid
         title="Explore Vehicles by Category"
-        subtitle="Select rugged 4x4 Land Cruisers, group vans, or economical sedans"
+        subtitle="4x4s, jeeps, vans and sedans"
         viewAllLabel="View all Vehicles"
         categories={CATEGORIES}
         selected={category}

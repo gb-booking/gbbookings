@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bed, Building2, Mountain, Sparkles, Users, Waves } from 'lucide-react';
+import { Bed, Building2, Mountain, Hotel, Users, Waves } from 'lucide-react';
 import { Listing } from '../../types';
 import { useListings } from '../../shared/hooks/useListings';
 import { useWishlist } from '../../shared/hooks/useWishlist';
@@ -15,11 +15,11 @@ interface HotelsSectionProps {
 }
 
 const CATEGORIES: LandingCategory[] = [
-  { id: 'luxury-resorts', title: 'Luxury Resorts', subtitle: '5-Star world-class amenities & views', icon: Sparkles, bgImage: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40' },
-  { id: 'lakeside-resorts', title: 'Lakeside Lodges', subtitle: 'Direct water edge & private boating', icon: Waves, bgImage: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-cyan-500/20 text-cyan-400 border-cyan-400/40' },
-  { id: 'alpine-lodges', title: 'Alpine Ski Lodges', subtitle: 'Ski-in / ski-out with fireside lounges', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1518098268026-4e43a1a009de?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-blue-500/20 text-blue-400 border-blue-400/40' },
-  { id: 'heritage-hotels', title: 'Heritage Forts', subtitle: 'Restored royal castles & fort suites', icon: Building2, bgImage: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-amber-500/20 text-amber-400 border-amber-400/40' },
-  { id: 'boutique-stays', title: 'Boutique Stays', subtitle: 'Cozy, personalized mountain hospitality', icon: Bed, bgImage: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-purple-500/20 text-purple-400 border-purple-400/40' },
+  { id: 'luxury-resorts', title: 'Luxury Resorts', subtitle: 'Full-service resorts with restaurants and valley views', icon: Hotel, bgImage: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40' },
+  { id: 'lakeside-resorts', title: 'Lakeside Lodges', subtitle: 'Rooms on the lakeshore', icon: Waves, bgImage: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-cyan-500/20 text-cyan-400 border-cyan-400/40' },
+  { id: 'alpine-lodges', title: 'Alpine Ski Lodges', subtitle: 'Lodges high in the valleys', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1518098268026-4e43a1a009de?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-blue-500/20 text-blue-400 border-blue-400/40' },
+  { id: 'heritage-hotels', title: 'Heritage Forts', subtitle: 'Rooms in restored forts and old palaces', icon: Building2, bgImage: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-amber-500/20 text-amber-400 border-amber-400/40' },
+  { id: 'boutique-stays', title: 'Boutique Stays', subtitle: 'Small hotels with a handful of rooms', icon: Bed, bgImage: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-purple-500/20 text-purple-400 border-purple-400/40' },
 ];
 
 export default function HotelsSection({ onSelectListing, onTriggerSearch }: HotelsSectionProps) {
@@ -46,7 +46,7 @@ export default function HotelsSection({ onSelectListing, onTriggerSearch }: Hote
         icon={Building2}
         eyebrow="World-Class Alpine Hospitality"
         title={<>Luxury Hotels &amp; Resorts in <span className="text-emerald-300">Gilgit Baltistan</span></>}
-        subtitle="From heated infinity pools on turquoise lake edges to alpine ski lodges and heritage fort hotels."
+        subtitle="Lake resorts, valley lodges and fort hotels. Compare rooms and book online, or pay on arrival where the hotel offers it"
       />
 
       <SearchConsole
@@ -80,7 +80,7 @@ export default function HotelsSection({ onSelectListing, onTriggerSearch }: Hote
 
       <CategoryGrid
         title="Explore Hotels by Category"
-        subtitle="Choose from luxury resorts, lakeside lodges & historic castle stays"
+        subtitle="Resorts, lake lodges and fort hotels"
         viewAllLabel="View all Hotels"
         categories={CATEGORIES}
         selected={category}

@@ -34,7 +34,7 @@ export default function OffersSection({ onSelectListing, onTriggerSearch }: Offe
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-300">
             <Tag className="h-4 w-4" /> Verified marketplace offers
           </div>
-          <h1 className="text-3xl font-black sm:text-4xl">Travel Offers</h1>
+          <h1 className="text-3xl font-black sm:text-4xl">Travel offers</h1>
           <p className="max-w-xl text-sm text-slate-200">Current promotions published by approved GBBookings vendors.</p>
           <form onSubmit={handleSubmit} className="flex max-w-xl gap-2">
             <label className="relative flex-1">

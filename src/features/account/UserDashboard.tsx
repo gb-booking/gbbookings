@@ -35,15 +35,17 @@ const statusColors: Record<Booking['status'], string> = {
   pending: 'bg-amber-50 text-amber-800', confirmed: 'bg-emerald-50 text-emerald-800',
   completed: 'bg-slate-100 text-slate-600', cancelled: 'bg-rose-50 text-rose-700', no_show: 'bg-slate-100 text-slate-600',
 };
-const primaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#006F3C] px-4 text-sm font-semibold text-white hover:bg-[#005c32] disabled:opacity-50';
-const secondaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50';
+const primaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-sm font-bold text-white shadow-xs transition-colors hover:bg-slate-800 disabled:opacity-50';
+const secondaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 disabled:opacity-50';
 const money = (amount: number) => 'PKR ' + amount.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 const clock = (value?: string | Date) => value ? new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'soon';
 const awaitingPayment = (booking: Booking) => booking.status === 'pending' && booking.paymentMethod === 'online' && booking.paymentStatus === 'pending';
 const BUSINESS_LABEL: Record<string, string> = { hotel: 'Hotel business', homestay: 'Homestay host', vehicle: 'Car rental partner', tour_operator: 'Tour partner', multi_service: 'Partner business' };
 
 export default function UserDashboard(props: UserDashboardProps) {
-  return props.section === 'bookings' ? <BookingsPage {...props} /> : props.section === 'saved' ? <SavedPage {...props} /> : <ProfilePage {...props} />;
+  return <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 animate-fadeIn pb-8">
+    {props.section === 'bookings' ? <BookingsPage {...props} /> : props.section === 'saved' ? <SavedPage {...props} /> : <ProfilePage {...props} />}
+  </div>;
 }
 
 /* ───────────────────────── Bookings & trips ───────────────────────── */
@@ -125,9 +127,9 @@ function BookingsPage({ setView, onSelectBooking, onMessage, paymentReturn, user
   const pickTrip = (next: Trip) => { setTrip(next); setPage(1); };
 
   if (paying) return <PaymentWaiting bookingId={paying.bookingId} url={paying.url} />;
-  return <div id="user-dashboard-view" className="mx-auto max-w-5xl space-y-5 pb-10">
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Bookings &amp; trips</h1>
+  return <div id="user-dashboard-view" className="mx-auto max-w-7xl space-y-6 pb-10">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs">
+      <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-slate-950">Bookings &amp; trips</h1>
       <div className="flex items-center gap-2">
         <button type="button" disabled={loading} onClick={() => setReload((value) => value + 1)} aria-label="Refresh bookings" className="flex size-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-40"><RefreshCw className="size-4" /></button>
         <button type="button" onClick={() => setView('hotels')} className={secondaryButton}>Find your next stay<ArrowRight className="size-4" /></button>
@@ -200,7 +202,7 @@ function UpcomingCard({ booking, today, canCancel, paying, onView, onMessage, on
   const startValue = booking.tour ? `${booking.tour.meetingPoint ?? ''}${booking.tour.startTime ? ` · ${booking.tour.startTime}` : ''}`
     : booking.rental ? `${booking.rental.pickupTime}, ${booking.rental.pickupPlace}` : booking.checkInTime ? `From ${booking.checkInTime}` : formatDateForDisplay(booking.startDate);
   return <article className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white sm:flex-row">
-    <img src={booking.listingImage} alt="" onError={handleImageError} className="h-48 w-full object-cover sm:h-auto sm:w-72" />
+    <img src={booking.listingImage} alt="" onError={handleImageError} className="h-48 w-full object-cover sm:h-auto sm:w-44" />
     <div className="min-w-0 flex-1 space-y-3 p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex flex-wrap gap-2">
@@ -210,11 +212,11 @@ function UpcomingCard({ booking, today, canCancel, paying, onView, onMessage, on
         <span className="break-all font-mono text-xs text-slate-500">{booking.reference || booking.id}</span>
       </div>
       <div>
-        <h2 className="text-xl font-extrabold text-slate-950">{booking.listingTitle}</h2>
+        <h2 className="text-lg font-bold uppercase tracking-tight text-[#0F172A]">{booking.listingTitle}</h2>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500"><MapPin className="size-3.5 shrink-0" />{booking.listingLocation}</p>
       </div>
       <p className="text-sm text-slate-600">{formatDateForDisplay(booking.startDate)} – {formatDateForDisplay(booking.endDate)} · {partySummary(booking)} · <strong className="text-slate-900">{when}</strong></p>
-      <dl className="grid gap-3 rounded-xl bg-[#F5F7F4] p-3.5 text-sm sm:grid-cols-3">
+      <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm sm:grid-cols-3">
         <div><dt className="text-slate-500">{startLabel}</dt><dd className="font-semibold text-slate-900">{startValue}</dd></div>
         <div><dt className="text-slate-500">Questions?</dt><dd><button type="button" onClick={onMessage} className="font-semibold text-[#006F3C] underline">Message the partner</button></dd></div>
         <div><dt className="text-slate-500">{booking.paymentStatus === 'paid' ? 'Total paid' : unpaid ? 'To pay now' : 'Pay on arrival'}</dt><dd className="font-semibold text-slate-900">{money(booking.totalPrice)}</dd></div>
@@ -318,15 +320,15 @@ function ProfilePage({ userEmail, userName, setView, onSelectListing }: UserDash
   const initials = name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   const isPartner = Boolean(user?.roles?.some((role) => role === 'vendor_owner' || role === 'vendor_staff'));
   const memberSince = user?.memberSince ? new Date(user.memberSince).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : null;
-  const card = 'rounded-2xl border border-slate-200 bg-white';
+  const card = 'rounded-2xl border border-slate-200 bg-white shadow-xs';
 
-  return <div id="user-dashboard-view" className="mx-auto flex max-w-6xl flex-wrap items-start gap-8 pb-10">
-    <aside className="w-full space-y-5 lg:sticky lg:top-28 lg:w-[340px]">
-      <div className={`${card} flex flex-col items-center gap-3 p-7 text-center shadow-[0_6px_24px_rgba(15,42,28,0.08)]`}>
-        <span className="flex size-24 items-center justify-center rounded-full bg-[#0F2A1C] text-3xl font-extrabold text-white" aria-hidden="true">{initials}</span>
-        <h1 className="text-2xl font-extrabold text-slate-950">{name}</h1>
+  return <div id="user-dashboard-view" className="mx-auto max-w-7xl space-y-8 pb-10">
+    <aside className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className={`${card} flex flex-wrap items-center justify-center sm:justify-start gap-4 p-5 sm:p-6 text-center sm:text-left shadow-xs`}>
+        <span className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-[#0F172A] text-2xl font-extrabold text-white" aria-hidden="true">{initials}</span>
+        <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-tight text-slate-950 wrap-break-word">{name}</h1>
         <p className="text-sm text-slate-500">{isPartner ? 'Partner' : 'Guest'}{memberSince ? ` · member since ${memberSince}` : ''}</p>
-        <dl className="mt-1 grid w-full grid-cols-3 border-t border-slate-200 pt-4">
+        <dl className="mt-1 grid w-full grid-cols-3 gap-3 border-t border-slate-200 pt-4">
           {([['Trips', counts?.trips], ['Upcoming', counts?.upcoming], ['Saved', savedCount ?? undefined]] as const).map(([label, value], index) => (
             <div key={label} className={index === 1 ? 'border-x border-slate-200' : ''}><dd className="text-xl font-extrabold text-slate-950">{value ?? '—'}</dd><dt className="text-xs text-slate-500">{label}</dt></div>
           ))}
@@ -340,7 +342,7 @@ function ProfilePage({ userEmail, userName, setView, onSelectListing }: UserDash
       </div>
     </aside>
 
-    <main className="min-w-0 flex-1 basis-[560px] space-y-8">
+    <main className="min-w-0 space-y-6">
       {isPartner && <section aria-label="Your business" className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#0F2A1C] px-6 py-6 text-white">
         <div className="space-y-1">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-200">Your business</p>
@@ -350,8 +352,8 @@ function ProfilePage({ userEmail, userName, setView, onSelectListing }: UserDash
         <button type="button" onClick={() => setView('vendor-dashboard')} className="inline-flex min-h-11 items-center rounded-xl bg-white px-5 text-sm font-bold text-[#0F2A1C] hover:bg-slate-100">Open partner dashboard</button>
       </section>}
 
-      <section aria-labelledby="profile-details" className="space-y-1">
-        <h2 id="profile-details" className="border-b border-slate-200 pb-2 text-2xl font-extrabold text-slate-950">Personal details</h2>
+      <section aria-labelledby="profile-details" className="space-y-1 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs">
+        <h2 id="profile-details" className="border-b border-slate-200 pb-4 text-sm font-bold uppercase tracking-wider text-slate-800">Personal details</h2>
         {user ? <>
           <EditableRow label="Name" value={user.name} hint="Used on your bookings and reviews." minLength={2}
             onSave={async (value) => setUser(await api.updateProfile({ name: value }))} />
@@ -368,8 +370,8 @@ function ProfilePage({ userEmail, userName, setView, onSelectListing }: UserDash
         </> : <LoadingCards />}
       </section>
 
-      <section aria-labelledby="profile-security" className="space-y-3">
-        <h2 id="profile-security" className="border-b border-slate-200 pb-2 text-2xl font-extrabold text-slate-950">Login &amp; security</h2>
+      <section aria-labelledby="profile-security" className="space-y-4">
+        <h2 id="profile-security" className="border-b border-slate-200 pb-4 text-sm font-bold uppercase tracking-wider text-slate-800">Login &amp; security</h2>
         <div className={`${card} p-5 sm:p-7`}><SecurityPanel /></div>
       </section>
 
@@ -408,11 +410,11 @@ function SavedPage({ setView, onSelectListing }: UserDashboardProps) {
     finally { setRemovingId(null); }
   };
 
-  return <div className="mx-auto max-w-6xl space-y-5 pb-10">
+  return <div className="mx-auto max-w-7xl space-y-6 pb-10">
     <header><h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Saved stays</h1>{!savedLoading && saved.length > 0 && <p className="mt-1 text-sm text-slate-500">{saved.length} saved {saved.length === 1 ? 'place' : 'places'}</p>}</header>
         {savedError && <ErrorNotice message={savedError} onRetry={() => setReload((value) => value + 1)} />}
         {savedLoading ? <LoadingCards /> : !savedError && saved.length === 0 ? <EmptyState icon={<Heart className="size-6" />} title="Keep your favourite places close" text="Tap the heart on a stay, car or tour to save it here while you plan your trip." action={<button type="button" onClick={() => setView('hotels')} className={primaryButton}>Discover stays<ArrowRight className="size-4" /></button>} />
-          : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{saved.map((listing) => <article key={listing.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="relative"><button type="button" onClick={() => onSelectListing(listing)} aria-label={'View ' + listing.title} className="block w-full"><img src={listing.image} alt={listing.title} onError={handleImageError} className="aspect-[4/3] w-full object-cover" /></button><button type="button" disabled={removingId !== null} onClick={() => void removeSaved(listing.id)} aria-label={'Remove ' + listing.title + ' from saved stays'} className="absolute right-3 top-3 flex size-10 items-center justify-center rounded-full bg-white text-rose-700 shadow-sm hover:bg-rose-50 disabled:opacity-50">{removingId === listing.id ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}</button></div><div className="space-y-2 p-4"><p className="flex items-center gap-1 text-xs text-slate-500"><MapPin className="size-3.5" />{listing.location}</p><button type="button" onClick={() => onSelectListing(listing)} className="text-left text-base font-semibold text-slate-900 hover:text-emerald-700">{listing.title}</button><div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold text-slate-900">{money(listing.price)}<span className="font-normal text-slate-400">{['hotel', 'homestay'].includes(listing.type) ? ' / night' : listing.type === 'car' ? ' / day' : listing.type === 'tour' ? ' / person' : ''}</span></p>{listing.reviewsCount > 0 && <span className="flex items-center gap-1 text-xs text-slate-600"><Star className="size-3 fill-amber-400 text-amber-400" />{listing.rating}</span>}</div></div></article>)}</div>}
+          : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{saved.map((listing) => <article key={listing.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs"><div className="relative"><button type="button" onClick={() => onSelectListing(listing)} aria-label={'View ' + listing.title} className="block w-full"><img src={listing.image} alt={listing.title} onError={handleImageError} className="aspect-[4/3] w-full object-cover" /></button><button type="button" disabled={removingId !== null} onClick={() => void removeSaved(listing.id)} aria-label={'Remove ' + listing.title + ' from saved stays'} className="absolute right-3 top-3 flex size-10 items-center justify-center rounded-full bg-white text-rose-700 shadow-sm hover:bg-rose-50 disabled:opacity-50">{removingId === listing.id ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}</button></div><div className="space-y-2 p-4"><p className="flex items-center gap-1 text-xs text-slate-500"><MapPin className="size-3.5" />{listing.location}</p><button type="button" onClick={() => onSelectListing(listing)} className="text-left text-base font-semibold text-slate-900 hover:text-emerald-700">{listing.title}</button><div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold text-slate-900">{money(listing.price)}<span className="font-normal text-slate-400">{['hotel', 'homestay'].includes(listing.type) ? ' / night' : listing.type === 'car' ? ' / day' : listing.type === 'tour' ? ' / person' : ''}</span></p>{listing.reviewsCount > 0 && <span className="flex items-center gap-1 text-xs text-slate-600"><Star className="size-3 fill-amber-400 text-amber-400" />{listing.rating}</span>}</div></div></article>)}</div>}
   </div>;
 }
 

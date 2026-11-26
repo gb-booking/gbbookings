@@ -24,11 +24,11 @@ const DESTINATIONS = [
 const placeKey = (name: string) => name.split(' ')[0];
 
 const experiences = [
-  { id: 'mountain-view', title: 'Mountain View', subtitle: 'Wake up to stunning mountain views', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1542718610-a1d656d1884c?auto=format&fit=crop&w=800&q=80' },
-  { id: 'family-friendly', title: 'Family Friendly', subtitle: 'Perfect stays for you and your family', icon: Users, bgImage: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80' },
-  { id: 'lakeside-stays', title: 'Lakeside Stays', subtitle: 'Relax by the serene lakes and rivers', icon: Waves, bgImage: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=800&q=80' },
-  { id: 'local-culture', title: 'Local Culture', subtitle: 'Immerse in local life and traditions', icon: Home, bgImage: 'https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=800&q=80' },
-  { id: 'budget-friendly', title: 'Budget Friendly', subtitle: 'Comfortable stays that fit your budget', icon: Wallet, bgImage: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80' },
+  { id: 'mountain-view', title: 'Mountain View', subtitle: 'Rooms that face the peaks', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1542718610-a1d656d1884c?auto=format&fit=crop&w=800&q=80' },
+  { id: 'family-friendly', title: 'Family Friendly', subtitle: 'Homes with room for the whole family', icon: Users, bgImage: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80' },
+  { id: 'lakeside-stays', title: 'Lakeside Stays', subtitle: 'Homes near lakes and rivers', icon: Waves, bgImage: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=800&q=80' },
+  { id: 'local-culture', title: 'Local Culture', subtitle: 'Stay with a family in the village', icon: Home, bgImage: 'https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=800&q=80' },
+  { id: 'budget-friendly', title: 'Budget Friendly', subtitle: 'Simple rooms at lower prices', icon: Wallet, bgImage: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80' },
 ];
 
 export default function HomestaysSection({ onSelectListing, onTriggerSearch }: HomestaysSectionProps) {
@@ -56,7 +56,7 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
         icon={Home}
         eyebrow="Stay Local. Feel at Home."
         title={<>Authentic Homestays in <span className="text-emerald-300">Gilgit Baltistan</span></>}
-        subtitle="Experience warm hospitality, local culture, and breathtaking views with our handpicked homestays."
+        subtitle="Rooms in family homes across the valleys, hosted by the people who live there"
       />
 
       <SearchConsole
@@ -335,7 +335,7 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
               </div>
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-sm font-medium">
                 <Check className="w-4 h-4 text-emerald-300" />
-                <span>Free cancellation before check-in</span>
+                <span>Cancellation terms shown before you book</span>
               </div>
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-sm font-medium">
                 <Check className="w-4 h-4 text-emerald-300" />
@@ -367,7 +367,6 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
               referrerPolicy="no-referrer"
               onError={handleImageError}
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#004d2a] via-transparent to-transparent lg:block hidden" />
           </div>
         </div>
       </section>
@@ -377,7 +376,7 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
         {/* Subscribe to Newsletter */}
         <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-8 space-y-4 shadow-2xs flex flex-col justify-between">
           <div className="space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-[#006F3C] flex items-center justify-center">
+            <div className="size-12 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
               <Send className="w-6 h-6 text-[#006F3C]" />
             </div>
             <h4 className="text-xl font-semibold text-slate-900">
@@ -425,7 +424,7 @@ function NewsletterForm() {
           <Send className="w-4 h-4" />
         </button>
       </form>
-      {state.done && <p role="status" className="text-xs font-semibold text-[#006F3C]">Thank you for subscribing!</p>}
+      {state.done && <p role="status" className="text-xs font-semibold text-[#006F3C]">You are subscribed</p>}
       {state.error && <p role="alert" className="text-xs font-semibold text-rose-700">{state.error}</p>}
     </div>
   );

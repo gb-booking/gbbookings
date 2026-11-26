@@ -148,10 +148,10 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
     { icon: CalendarRange, label: 'Season', value: openSeason(stayPolicies.openMonths) },
   ] : [];
 
-  const sectionClass = 'border-t border-slate-200 pt-6 space-y-4';
-  const headingClass = 'text-lg font-semibold text-slate-900';
-  const statClass = 'rounded-lg border border-slate-200 bg-white p-3';
-  const statLabel = 'block text-xs text-slate-500';
+  const sectionClass = 'rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs space-y-4';
+  const headingClass = 'text-sm font-bold uppercase tracking-wider text-slate-800';
+  const statClass = 'rounded-xl border border-slate-200 bg-slate-50 p-3.5';
+  const statLabel = 'block text-xs font-bold uppercase tracking-wider text-slate-500';
   const statValue = 'mt-0.5 block text-sm font-semibold text-slate-900';
   const amenities = listing.hotelSpecs?.amenities ?? listing.homestaySpecs?.amenities ?? [];
   const breakfast = listing.hotelSpecs?.breakfast;
@@ -165,21 +165,25 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
   ] : [];
 
   return (
-    <div id="listing-details-view" className="space-y-6 animate-fadeIn max-w-6xl mx-auto">
+    <div id="listing-details-view" className="space-y-6 sm:space-y-8 animate-fadeIn max-w-7xl mx-auto pb-24 lg:pb-8">
 
       <button
         id="btn-back-to-listings"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+        className="inline-flex min-h-11 items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-900 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to results
       </button>
 
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start" id="details-cols-container">
+
+        {/* Details column */}
+        <div className="min-w-0 lg:col-span-8 space-y-6 sm:space-y-8" id="details-content-column">
       {/* Title row */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between" id="listing-details-header">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" id="listing-details-header">
         <div className="space-y-1.5 min-w-0">
-          <span className="inline-block rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium capitalize text-[#006F3C]">{listing.type === 'homestay' ? `${listing.hotelSpecs?.hotelType || 'Homestay'} · ${entireHome ? 'Entire place' : 'Private rooms'}` : listing.type === 'hotel' ? listing.hotelSpecs?.hotelType || 'Hotel' : listing.type}</span>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-950 leading-tight wrap-break-word">{listing.title}</h1>
+          <span className="inline-block rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-[#006F3C]">{listing.type === 'homestay' ? `${listing.hotelSpecs?.hotelType || 'Homestay'} · ${entireHome ? 'Entire place' : 'Private rooms'}` : listing.type === 'hotel' ? listing.hotelSpecs?.hotelType || 'Hotel' : listing.type}</span>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-slate-950 leading-tight wrap-break-word">{listing.title}</h1>
           {specs?.stars ? <p className="text-sm font-medium text-slate-600" aria-label={`${specs.stars} star hotel`}><span aria-hidden="true" className="text-amber-500">{'★'.repeat(specs.stars)}</span> {specs.stars}-star hotel</p> : null}
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
             <span className="inline-flex items-center gap-1"><MapPin className="w-4 h-4 text-slate-400 shrink-0" /> {listing.location}</span>
@@ -217,20 +221,20 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
       </div>
 
       {/* Gallery */}
-      <div className="space-y-2" id="gallery-container">
-        <div className="aspect-video max-h-115 w-full overflow-hidden rounded-xl bg-slate-100">
+      <div className="space-y-3" id="gallery-container">
+        <div className="aspect-video w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
           <img src={activeImage} alt={listing.photos?.find((photo) => photo.url === activeImage)?.caption || listing.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={handleImageError} />
         </div>
         {listing.photos?.find((photo) => photo.url === activeImage)?.caption && <p className="text-sm text-slate-600">{listing.photos.find((photo) => photo.url === activeImage)!.caption}</p>}
         {listing.images && listing.images.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" id="gallery-thumbnails">
+          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none" id="gallery-thumbnails">
             {listing.images.map((img, i) => (
               <button
                 key={i}
                 id={`thumb-btn-${i}`}
                 onClick={() => setActiveImage(img)}
                 aria-label={`Show photo ${i + 1}`}
-                className={`w-20 aspect-4/3 shrink-0 overflow-hidden rounded-lg border-2 ${activeImage === img ? 'border-[#006F3C]' : 'border-transparent opacity-80 hover:opacity-100'}`}
+                className={`w-20 sm:w-24 aspect-4/3 shrink-0 overflow-hidden rounded-xl border-2 transition-all ${activeImage === img ? 'border-[#006F3C]' : 'border-transparent opacity-80 hover:opacity-100'}`}
               >
                 <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={handleImageError} />
               </button>
@@ -239,10 +243,7 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8" id="details-cols-container">
 
-        {/* Details column */}
-        <div className="space-y-6" id="details-content-column">
           <section className="space-y-2" id="details-description">
             <h2 className={headingClass}>About this {bookable ? 'place' : listing.type === 'car' ? 'vehicle' : 'trip'}</h2>
             <p className="text-slate-600 text-[15px] leading-relaxed">{listing.description}</p>
@@ -377,7 +378,7 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
           )}
 
           {hostName && (
-            <section className="border-t border-slate-200 pt-6 space-y-3" id="host-profile-card">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs space-y-3" id="host-profile-card">
               <div className="flex items-center gap-3">
                 {homestay?.hostImage
                   ? <img src={homestay.hostImage} alt={hostName} className="w-14 h-14 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
@@ -412,9 +413,9 @@ export default function ListingDetails({ listingId, onBack, onProceedToCheckout,
         </div>
 
         {/* Booking column */}
-        <div id="details-booking-column">
-          <div className="sticky top-40 rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
-            <p className="text-sm text-slate-500">
+        <div id="details-booking-column" className="min-w-0 lg:col-span-4 lg:sticky lg:top-36 scroll-mt-36">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] space-y-5">
+            <p className="border-b border-slate-100 pb-5 text-sm font-medium text-slate-500">
               From <span className="text-2xl font-bold text-slate-950">PKR {listing.price.toLocaleString()}</span> / {unit}
             </p>
 

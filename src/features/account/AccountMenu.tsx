@@ -1,4 +1,4 @@
-import { CalendarCheck, Gift, Heart, LifeBuoy, MessageSquare, Sparkles, UserRound, Wallet } from 'lucide-react';
+import { CalendarCheck, Gift, Heart, LifeBuoy, MessageSquare, Route, UserRound, Wallet } from 'lucide-react';
 
 /** The Customer sidebar from the Console SRS, over the guest pages. */
 const ITEMS = [
@@ -7,7 +7,7 @@ const ITEMS = [
   { view: 'saved', label: 'Wishlist', icon: Heart },
   { view: 'inbox', label: 'Messages', icon: MessageSquare },
   { view: 'support', label: 'Support tickets', icon: LifeBuoy },
-  { view: 'ai-planner', label: 'AI trip planner', icon: Sparkles },
+  { view: 'ai-planner', label: 'AI trip planner', icon: Route },
   { view: 'loyalty', label: 'Loyalty', icon: Gift },
   { view: 'profile', label: 'Account settings', icon: UserRound },
 ] as const;

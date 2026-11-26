@@ -80,11 +80,10 @@ export default function MobileInstallPrompt() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold tracking-tight text-white">GBBookings Mobile App</span>
-                <span className="text-[9px] bg-[#00A651] text-white px-1.5 py-0.5 rounded font-black tracking-wide">PWA</span>
+                <span className="text-sm font-semibold text-white">GBBookings app</span>
               </div>
               <p className="text-[11px] text-slate-300 truncate">
-                {isIOS ? 'Tap Share and "Add to Home Screen"' : 'Install for faster bookings & offline trips'}
+                {isIOS ? 'Tap Share and "Add to Home Screen"' : 'Install to open your bookings offline'}
               </p>
             </div>
           </div>

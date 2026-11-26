@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Award, Check, Clock, Compass, Mountain, Sparkles, User, Users } from 'lucide-react';
+import { Award, Check, Clock, Compass, Mountain, Leaf, User, Users } from 'lucide-react';
 import { Listing } from '../../types';
 import { useListings } from '../../shared/hooks/useListings';
 import { useWishlist } from '../../shared/hooks/useWishlist';
@@ -15,11 +15,11 @@ interface ToursSectionProps {
 }
 
 const CATEGORIES: LandingCategory[] = [
-  { id: 'autumn-tours', title: 'Autumn Odyssey', subtitle: 'Golden poplars & red foliage landscapes', icon: Sparkles, bgImage: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-[#FF7D29]/20 text-[#FF7D29] border-[#FF7D29]/40' },
-  { id: 'deosai-safari', title: 'Deosai Safari', subtitle: 'Land of Giants plateau & star glamping', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40' },
-  { id: 'blossom-tours', title: 'Spring Blossom', subtitle: 'Pink & white cherry blooms across Hunza', icon: Compass, bgImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-pink-500/20 text-pink-400 border-pink-400/40' },
-  { id: 'luxury-expeditions', title: '5-Star Expeditions', subtitle: 'Luxury hotels, private 4x4 & flight tickets', icon: Award, bgImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-amber-500/20 text-amber-400 border-amber-400/40' },
-  { id: 'cultural-heritage', title: 'Heritage & Forts', subtitle: 'Baltit, Altit & Shigar royal heritage', icon: User, bgImage: 'https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-blue-500/20 text-blue-400 border-blue-400/40' },
+  { id: 'autumn-tours', title: 'Autumn Odyssey', subtitle: 'Golden poplars in late autumn', icon: Leaf, bgImage: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-[#FF7D29]/20 text-[#FF7D29] border-[#FF7D29]/40' },
+  { id: 'deosai-safari', title: 'Deosai Safari', subtitle: 'Camping trips on the Deosai plateau', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40' },
+  { id: 'blossom-tours', title: 'Spring Blossom', subtitle: 'Apricot and cherry blossom in Hunza', icon: Compass, bgImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-pink-500/20 text-pink-400 border-pink-400/40' },
+  { id: 'luxury-expeditions', title: '5-Star Expeditions', subtitle: 'Top hotels and a private 4x4', icon: Award, bgImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-amber-500/20 text-amber-400 border-amber-400/40' },
+  { id: 'cultural-heritage', title: 'Heritage & Forts', subtitle: 'Baltit, Altit and Shigar forts', icon: User, bgImage: 'https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=800&q=80', iconBg: 'bg-blue-500/20 text-blue-400 border-blue-400/40' },
 ];
 
 const DURATIONS = ['3 Days / 2 Nights', '5 Days / 4 Nights', '7 Days / 6 Nights', '10 Days / 9 Nights'];
@@ -46,9 +46,9 @@ export default function ToursSection({ onSelectListing, onTriggerSearch }: Tours
         image="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=2000&q=80"
         alt="Autumn Odyssey in Hunza Valley"
         icon={Compass}
-        eyebrow="All-Inclusive Tailored Mountain Expeditions"
-        title={<>Guided Tour Packages in <span className="text-emerald-300">Gilgit Baltistan</span></>}
-        subtitle="Handcrafted itineraries with stays at luxury resorts, private 4x4 Prado transportation, expert local guides & fort entry permits included."
+        eyebrow="Extraordinary Journeys. Unforgettable Memories."
+        title={<>Tours &amp; Expeditions in <span className="text-emerald-300">Gilgit Baltistan</span></>}
+        subtitle="Packages from local operators with stays, transport and a guide. Each tour lists what it includes"
       />
 
       <SearchConsole
@@ -94,8 +94,8 @@ export default function ToursSection({ onSelectListing, onTriggerSearch }: Tours
       </SearchConsole>
 
       <CategoryGrid
-        title="Explore Tour Packages by Style"
-        subtitle="Autumn foliage, Deosai safari expeditions & cherry blossom group tours"
+        title="Explore Tours by Season & Style"
+        subtitle="Autumn colour, Deosai camping and spring blossom"
         viewAllLabel="View all Tour Packages"
         categories={CATEGORIES}
         selected={category}

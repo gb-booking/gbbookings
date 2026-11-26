@@ -782,7 +782,7 @@ export default function AddHotelWizard({
         </aside>
       )}
       {hub && <aside aria-label="Guest preview" className="hidden w-80 shrink-0 space-y-2.5 xl:block">
-        <p className="text-xs font-bold tracking-[0.12em] text-slate-500">HOW GUESTS WILL SEE IT</p>
+        <p className="text-xs font-bold tracking-[0.12em] text-slate-500">How guests will see it</p>
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           {photos[0] ? <img src={photos[0].url} alt={photos[0].caption || "Cover photo"} className="h-44 w-full object-cover" />
             : <div className="flex h-44 items-center justify-center bg-slate-100 text-sm text-slate-500">Cover photo</div>}

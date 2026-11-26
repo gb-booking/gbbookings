@@ -1,7 +1,6 @@
 import type { InboxStart } from '../features/messages/Inbox';
 import { lazy, Suspense, useState, useEffect, useRef, type ReactNode } from 'react';
 import AccountMenu from '../features/account/AccountMenu';
-import { Sparkles } from 'lucide-react';
 import Navbar from '../shared/components/Navbar';
 import MobileAppBottomNav from '../shared/components/MobileAppBottomNav';
 import { Booking, Listing } from '../types';
@@ -31,7 +30,7 @@ const PartnerGate = lazy(() => import('../features/partner/PartnerGate'));
 const AdminDashboard = lazy(() => import('../features/admin/AdminDashboard'));
 const GuestPayments = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestPayments })));
 const GuestLoyalty = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestLoyalty })));
-const AiChat = lazy(() => import('../features/planner/AiChat'));
+const AiPlanner = lazy(() => import('../features/planner/AiPlanner'));
 const LegalPage = lazy(() => import('../features/support/LegalPage'));
 const AboutPage = lazy(() => import('../features/support/AboutPage'));
 const TownPage = lazy(() => import('../features/catalog/TownPage'));
@@ -200,10 +199,7 @@ export default function App() {
   }, [isLoggedIn, isStaff, view]);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'register'>('signin');
-  const [showPlanner, setShowPlanner] = useState(false);
-  useEffect(() => {
-    if (view === 'ai-planner') { setShowPlanner(true); setView('explore'); }
-  }, [view]);
+
 
   useEffect(() => {
     let active = true;
@@ -284,8 +280,8 @@ export default function App() {
       hasSession.current = false;
       setUserId(''); setIsLoggedIn(false); setUserEmail(''); setUserName(''); setUserRoles([]);
       setReceiptBooking(null); setBookingParams(null); setSelectedListing(null); setSelectedListingId(null);
-      setShowAuthModal(false); setShowPlanner(false);
-      flashToast('You have signed out. See you soon!');
+      setShowAuthModal(false);
+      flashToast('You have signed out');
       window.location.replace(destination);
     }).finally(() => { if (logoutInFlight.current === pending) logoutInFlight.current = null; });
     logoutInFlight.current = pending;
@@ -648,6 +644,7 @@ export default function App() {
           />
         )}
 
+        {view === 'ai-planner' && <AiPlanner onSelectListing={handleSelectListing} />}
         {view === 'support' && accountFrame(<SupportCentre />)}
         {view === 'payments' && accountFrame(<GuestPayments />)}
         {view === 'loyalty' && accountFrame(<GuestLoyalty />)}
@@ -669,7 +666,7 @@ export default function App() {
       <Suspense fallback={null}>
         <Footer onNavigate={handleFooterLink} />
 
-        {showPlanner && <AiChat onClose={() => setShowPlanner(false)} onSelectListing={handleSelectListing} />}
+
 
         {showAuthModal && (
           <AuthModal
@@ -683,7 +680,6 @@ export default function App() {
         <CookieNotice />
       </Suspense>
 
-      <button type="button" aria-label="Open the trip assistant" aria-haspopup="dialog" onClick={() => setShowPlanner(true)} className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex min-h-12 items-center gap-2 rounded-full bg-[#006F3C] px-4 text-sm font-semibold text-white shadow-lg hover:bg-[#005c32] sm:right-6 lg:bottom-6"><Sparkles className="size-5" /><span className="hidden sm:inline">Plan my trip</span></button>
 
       {/* Native-grade Mobile App Bottom Tab Navigation */}
       <MobileAppBottomNav 

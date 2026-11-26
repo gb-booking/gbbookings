@@ -35,15 +35,16 @@ function ListingChip({ id, onSelect }: { id: string; onSelect: (listing: Listing
 }
 
 /** The trip assistant: a small chat window that talks with the traveller, then recommends real listings. */
-export default function AiChat({ onClose, onSelectListing }: { onClose: () => void; onSelectListing: (listing: Listing) => void }) {
+export default function AiChat({ onClose, onSelectListing, embedded = false, initialPrompt, onThinkingChange }: { onClose: () => void; onSelectListing: (listing: Listing) => void; embedded?: boolean; initialPrompt?: string; onThinkingChange?: (busy: boolean) => void }) {
   const [messages, setMessages] = useState<Message[]>(savedMessages);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
+  const sentInitialPrompt = useRef(false);
 
-  useEffect(() => { field.current?.focus(); }, []);
+  useEffect(() => { if (!embedded) field.current?.focus(); }, [embedded]);
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' });
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch { /* storage unavailable: the chat ends with the page */ }
@@ -54,21 +55,29 @@ export default function AiChat({ onClose, onSelectListing }: { onClose: () => vo
     if (!body || thinking) return;
     const next = [...messages, { role: 'user' as const, text: body }];
     setMessages(next); setDraft(''); setError(''); setThinking(true);
+    onThinkingChange?.(true);
     try {
       // The server takes the last 30 messages at most, which is plenty of context for a trip.
       setMessages([...next, { role: 'assistant', text: await api.tripChat(next.slice(-30)) }]);
     } catch (reason) {
       setError(reason instanceof ApiError && reason.status === 503 ? 'The trip assistant is not available right now. Please try again later, or browse stays yourself.' : reason instanceof Error ? reason.message : 'That didn’t send. Please try again.');
       setMessages(messages); setDraft(body);
-    } finally { setThinking(false); field.current?.focus(); }
+    } finally { setThinking(false); onThinkingChange?.(false); field.current?.focus(); }
   };
 
   const submit = (event: FormEvent) => { event.preventDefault(); void send(draft); };
 
-  return <section role="dialog" aria-label="Trip assistant" className="fixed inset-x-0 bottom-0 z-90 flex h-[85dvh] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-fadeIn sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-3rem))] sm:w-[400px] sm:rounded-2xl">
+  useEffect(() => {
+    if (initialPrompt && !sentInitialPrompt.current) {
+      sentInitialPrompt.current = true;
+      void send(initialPrompt);
+    }
+  }, [initialPrompt]);
+
+  return <section role={embedded ? 'region' : 'dialog'} aria-label={embedded ? 'AI travel itinerary' : 'Trip assistant'} className={embedded ? 'flex min-h-[540px] h-[min(760px,calc(100dvh-8rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm' : 'fixed inset-x-0 bottom-0 z-90 flex h-[85dvh] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-fadeIn sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-3rem))] sm:w-[400px] sm:rounded-2xl'}>
     <header className="flex items-center gap-3 bg-forest-950 px-4 py-3 text-white">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10"><Sparkles className="size-5 text-emerald-300" aria-hidden="true" /></span>
-      <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-bold">GBBookings trip assistant</h2><p className="truncate text-xs text-slate-300">Ask me anything about your trip</p></div>
+      <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-bold">{embedded ? 'Your personalized itinerary' : 'GBBookings trip assistant'}</h2><p className="truncate text-xs text-slate-300">{embedded ? 'Refine your plan and explore live recommendations' : 'Ask me anything about your trip'}</p></div>
       {messages.length > 0 && <button type="button" aria-label="Start again" title="Start again" onClick={() => { setMessages([]); setError(''); }} className="flex size-9 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white"><RotateCcw className="size-4" /></button>}
       <button type="button" aria-label="Close" onClick={onClose} className="flex size-9 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white"><X className="size-5" /></button>
     </header>
