@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { 
   ChevronDown, Globe, User, Bell, Bot, Calendar, Headset, 
   Compass as TourIcon, Compass, Sparkles, MessageCircle, Building2, Home, 
@@ -16,12 +16,85 @@ import { useListings } from '../hooks/useListings';
 export type MegaTab = 'hotels' | 'homestays' | 'cars' | 'tours' | 'destinations' | 'offers';
 const CarBrandLogo = ({brand}:{brand:string}) => <span aria-label={brand} className="flex size-4 shrink-0 items-center justify-center rounded-sm border border-slate-200 bg-slate-100"><Car className="size-3 text-slate-500" /></span>;
 
-function OffersMenu({listings,loading,error,setView}:{listings:Listing[];loading:boolean;error:string|null;setView:(view:string)=>void}) {
- return <div className="grid grid-cols-12 gap-5 items-start">
-   <div className="col-span-3"><h4 className="mb-3 text-[11px] font-black uppercase tracking-wider text-slate-500">Featured Deals</h4>{[{view:'hotels',label:'Hotels',icon:Building2},{view:'homestays',label:'Homestays',icon:Home},{view:'cars',label:'Car Rentals',icon:Car},{view:'tours',label:'Tour Packages',icon:Compass}].map(({view,label,icon:Icon})=><button key={view} onClick={()=>setView(view)} className="group flex min-h-12 w-full items-center gap-3 rounded-xl p-2 text-left text-xs font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-[#00A651]"><span className="flex size-8 items-center justify-center rounded-lg bg-slate-100 group-hover:bg-emerald-100"><Icon className="size-4" /></span>{label}</button>)}</div>
-   <div className="col-span-6"><h4 className="mb-3 text-[11px] font-black uppercase tracking-wider text-slate-500">Current Marketplace Offers</h4><div className="grid grid-cols-2 gap-3">{loading?<p className="text-xs text-slate-500" role="status">Loading offers…</p>:error?<p className="text-xs text-slate-500">Offers could not be loaded. Browse all offers to try again.</p>:listings.length===0?<p className="text-xs text-slate-500">No active offers at the moment.</p>:listings.slice(0,4).map(offer=><button key={offer.id} onClick={()=>setView('offers')} className="group overflow-hidden rounded-xl border border-slate-200 text-left transition-all hover:border-emerald-300 hover:shadow-md"><img src={offer.image} alt="" onError={handleImageError} className="h-24 w-full object-cover transition-transform group-hover:scale-105" /><span className="block p-3"><span className="block truncate text-xs font-bold text-slate-900 group-hover:text-[#00A651]">{offer.title}</span><span className="mt-1 block text-xs text-slate-500">{offer.offerSpecs?.discountLabel || offer.location}</span></span></button>)}</div><button onClick={()=>setView('offers')} className="mt-4 min-h-10 text-xs font-bold text-[#006F3C] hover:text-[#00A651]">View All Offers</button></div>
-   <div className="relative col-span-3 flex min-h-64 flex-col justify-between overflow-hidden rounded-2xl bg-[#071728] p-5 text-white shadow-lg"><img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=600&q=80" alt="" onError={handleImageError} className="absolute inset-0 h-full w-full object-cover opacity-30" /><div className="relative"><h5 className="text-lg font-extrabold">Discover your next adventure</h5><p className="mt-2 text-xs leading-relaxed text-slate-300">Explore current promotions from approved local partners.</p></div><button onClick={()=>setView('offers')} className="relative mt-5 min-h-10 rounded-xl bg-[#00A651] px-4 text-xs font-bold hover:bg-[#008E45]">Explore Offers</button></div>
- </div>;
+// Offers directory — restored verbatim from old Navbar.tsx at 5372888^
+// (Featured Deals, Seasonal Offers, Payment Offers, Member Benefits,
+// Last Minute, 40% OFF panel). The previous version here showed only
+// Featured Deals + live offer cards; the live offers still live on /offers.
+function OffersMenu({ setView }: { setView: (view: string) => void }) {
+  const column = (title: string, icon: ReactNode, items: Array<{ title: string; desc: string; icon: ReactNode; color?: string; view?: string }>, viewAll: string) => (
+    <div className="col-span-2 text-left">
+      <h4 className="mb-2.5 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500">{icon}<span>{title}</span></h4>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div key={item.title} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setView(item.view ?? 'offers'); } }} onClick={() => setView(item.view ?? 'offers')} className="group flex cursor-pointer items-start gap-2.5 rounded-lg p-1.5 transition-all hover:bg-slate-50">
+            <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg font-bold transition-colors group-hover:bg-[#00A651]/10 group-hover:text-[#00A651] ${item.color ?? 'bg-slate-100 text-slate-600'}`}>{item.icon}</div>
+            <div>
+              <h5 className="text-[12px] font-bold text-slate-900 transition-colors group-hover:text-[#00A651]">{item.title}</h5>
+              <p className="text-[10px] leading-tight text-slate-500">{item.desc}</p>
+            </div>
+          </div>
+        ))}
+        <div className="border-t border-slate-100 pt-1">
+          <button type="button" onClick={() => setView('offers')} className="flex cursor-pointer items-center gap-1 text-[12px] font-bold text-slate-900 hover:text-[#00A651]"><span>{viewAll}</span><ArrowRight className="size-3.5" /></button>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-12 items-start gap-5">
+      {column('Featured Deals', <Gift className="size-3.5 text-[#00A651]" />, [
+        { title: 'Hotel Deals', desc: 'Best hotel discounts', icon: <Building2 className="size-4" />, view: 'hotels' },
+        { title: 'Homestay Deals', desc: 'Save on homestays', icon: <Home className="size-4" />, view: 'homestays' },
+        { title: 'Car Rental Deals', desc: 'Low prices on cars', icon: <Car className="size-4" />, view: 'cars' },
+        { title: 'Tour Package Deals', desc: 'Exclusive tour offers', icon: <TourIcon className="size-4" />, view: 'tours' },
+      ], 'View All Deals')}
+      {column('Seasonal Offers', <Flame className="size-3.5 text-orange-500" />, [
+        { title: 'Summer Sale', desc: 'Up to 40% OFF', icon: <Sun className="size-4" />, color: 'bg-orange-50 text-orange-600' },
+        { title: 'Winter Sale', desc: 'Up to 40% OFF', icon: <Snowflake className="size-4" />, color: 'bg-orange-50 text-orange-600' },
+        { title: 'Eid Special', desc: 'Special discounts', icon: <Moon className="size-4" />, color: 'bg-orange-50 text-orange-600' },
+        { title: 'Honeymoon Deals', desc: 'For couples', icon: <Heart className="size-4" />, color: 'bg-orange-50 text-orange-600' },
+        { title: 'Family Deals', desc: 'Perfect for families', icon: <Users className="size-4" />, color: 'bg-orange-50 text-orange-600' },
+      ], 'View All Seasonal Offers')}
+      {column('Payment Offers', <CreditCard className="size-3.5 text-blue-600" />, [
+        { title: 'JazzCash Discount', desc: 'Exclusive savings', icon: <Wallet className="size-4" />, color: 'bg-red-50 text-red-600' },
+        { title: 'Easypaisa Discount', desc: 'Exclusive savings', icon: <Wallet className="size-4" />, color: 'bg-emerald-50 text-emerald-600' },
+        { title: 'Bank Card Offers', desc: 'Save with cards', icon: <CreditCard className="size-4" />, color: 'bg-blue-50 text-blue-600' },
+        { title: 'Promo Codes', desc: 'Use code & save more', icon: <Percent className="size-4" />, color: 'bg-purple-50 text-purple-600' },
+      ], 'View All Payment Offers')}
+      {column('Member Benefits', <Star className="size-3.5 text-amber-500" />, [
+        { title: 'Login & Save', desc: 'Extra member discounts', icon: <User className="size-4" />, color: 'bg-amber-50 text-amber-600' },
+        { title: 'Referral Rewards', desc: 'Invite & earn', icon: <Gift className="size-4" />, color: 'bg-amber-50 text-amber-600' },
+        { title: 'Loyalty Points', desc: 'Earn points & save', icon: <Award className="size-4" />, color: 'bg-amber-50 text-amber-600' },
+        { title: 'First Booking Discount', desc: 'Special for new users', icon: <Percent className="size-4" />, color: 'bg-amber-50 text-amber-600' },
+      ], 'View All Benefits')}
+      {column('Last Minute', <Clock className="size-3.5 text-rose-500" />, [
+        { title: 'Flash Deals', desc: 'Limited time offers', icon: <Zap className="size-4" />, color: 'bg-rose-50 text-rose-600' },
+        { title: 'Weekend Deals', desc: 'Best weekend offers', icon: <Calendar className="size-4" />, color: 'bg-rose-50 text-rose-600' },
+        { title: 'Last Minute Getaways', desc: 'Plan spontaneous trips', icon: <TourIcon className="size-4" />, color: 'bg-rose-50 text-rose-600' },
+        { title: 'Early Bird Offers', desc: 'Book early & save more', icon: <Heart className="size-4" />, color: 'bg-rose-50 text-rose-600' },
+      ], 'View All Offers')}
+      <div className="col-span-2 text-left">
+        <div className="relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-4 text-slate-900 shadow-md">
+          <div className="relative z-10 space-y-1">
+            <span className="mb-1 inline-block rounded-full bg-emerald-100/80 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">Limited Time Only</span>
+            <p className="text-xs font-semibold text-slate-600">Up to</p>
+            <h5 className="text-3xl font-black leading-none tracking-tight text-[#00A651]">40% <span className="text-xl font-extrabold text-slate-800">OFF</span></h5>
+            <ul className="space-y-1.5 pt-3 text-[11px] font-bold text-slate-700">
+              {[{ label: 'Hotels', icon: Building2, view: 'hotels' }, { label: 'Tours & Packages', icon: TourIcon, view: 'tours' }, { label: 'Cars', icon: Car, view: 'cars' }, { label: 'Homestays', icon: Home, view: 'homestays' }].map(({ label, icon: Icon, view }) => (
+                <li key={label}><button type="button" onClick={() => setView(view)} className="flex cursor-pointer items-center gap-2 hover:text-[#00A651]"><Icon className="size-3.5 text-emerald-600" /><span>{label}</span></button></li>
+              ))}
+            </ul>
+          </div>
+          <div className="relative z-10 pt-4">
+            <button type="button" onClick={() => setView('offers')} className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#00A651] px-3 py-2 text-xs font-extrabold text-white shadow-md transition-all hover:bg-[#008E45]"><span>Explore All Offers</span><ArrowRight className="size-3.5" /></button>
+          </div>
+          <div className="pointer-events-none absolute -bottom-2 -right-2 size-20 opacity-80">
+            <img src="https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=150&q=80" alt="Special gift deal" className="h-full w-full rounded-xl border border-white object-cover shadow-lg" onError={handleImageError} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function NavbarMegaMenu({activeMegaTab,onNavigate,onClose,partnerView,closing,onEnter,onLeave}:{activeMegaTab:MegaTab;onNavigate:(view:string)=>void;onClose:()=>void;partnerView:string;closing:boolean;onEnter:()=>void;onLeave:()=>void}) {
@@ -460,7 +533,7 @@ export default function NavbarMegaMenu({activeMegaTab,onNavigate,onClose,partner
                   </div>
 
                 </div>
-              ) : activeMegaTab === 'offers' ? (<OffersMenu listings={listings} loading={loading} error={error} setView={setView} />) : activeMegaTab === 'destinations' ? (
+              ) : activeMegaTab === 'offers' ? (<OffersMenu setView={setView} />) : activeMegaTab === 'destinations' ? (
                 <div className="grid grid-cols-12 gap-5 items-start">
                   
                   {/* Column 1: EXPLORE BY REGION */}

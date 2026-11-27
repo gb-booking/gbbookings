@@ -58,14 +58,21 @@ export default function Navbar({ currentView, setView, userName, userEmail, isLo
     { id: 'homestays', label: isRtl ? 'ہوم اسٹیز' : 'Homestays', icon: Home },
     { id: 'cars', label: isRtl ? 'گاڑیاں' : 'Cars', icon: Car },
     { id: 'tours', label: isRtl ? 'ٹورز' : 'Tours', icon: Mountain },
+    // Travel Agency: restored nav item (old Navbar had no agency item in history;
+    // the 'agencies' route is being added to App.tsx by a parallel worker).
+    // It has no mega-menu — see isMegaTab guard below.
+    { id: 'agencies', label: isRtl ? 'ٹریول ایجنسی' : 'Travel Agency', icon: Compass },
   ];
-  const extraLinks = [
-    { id: 'destinations', label: 'Destinations', icon: Compass },
-    { id: 'offers', label: 'Offers', icon: Building2 },
-    { id: 'support', label: 'Help & support', icon: HelpCircle },
-  ];
+  // Only these tabs open the mega-menu; 'agencies' navigates directly.
+  const isMegaTab = (id: string): id is MegaTab => id === 'hotels' || id === 'homestays' || id === 'cars' || id === 'tours' || id === 'destinations' || id === 'offers';
   // Approved partners go to their dashboard; everyone else (including signed-out visitors) to the partner page.
   const partnerLink = isPartner ? { view: 'vendor-dashboard', label: 'Partner dashboard' } : { view: 'become-partner', label: 'Become a partner' };
+  const extraLinks = [
+    // Old Navbar "More" dropdown (5372888^): My Bookings, Partner dashboard, Support.
+    { id: 'bookings', label: 'My Bookings', icon: CalendarDays },
+    { id: partnerLink.view, label: partnerLink.label, icon: Building2 },
+    { id: 'support', label: 'Help & support', icon: HelpCircle },
+  ];
   const navigate = (view: string) => { dismissMega(); clearTimeout(moreTimer.current); setMobileOpen(false); setAccountOpen(false); setMoreOpen(false); setView(view); };
   useEffect(() => { dismissMega(); setMobileOpen(false); setAccountOpen(false); setMoreOpen(false); setError(''); }, [currentView, isLoggedIn]);
   useEffect(() => {
@@ -95,14 +102,15 @@ export default function Navbar({ currentView, setView, userName, userEmail, isLo
     <div id="nav-utility-bar" className="hidden border-b border-slate-800/80 bg-[#0A182E] text-slate-200 sm:block">
       <div className="mx-auto flex min-h-10 max-w-[1440px] items-center justify-between gap-4 px-4 py-1 text-[11px] lg:px-6 xl:text-xs">
         <div className="flex min-w-0 items-center gap-3 text-slate-300 lg:gap-4">
-          <span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5 shrink-0 text-white" /><span>Verified local partners</span></span>
+          <span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5 shrink-0 text-white" /><span>Best Price Guarantee</span></span>
           <span className="hidden h-3.5 w-px bg-slate-700 xl:block" />
-          <span className="hidden items-center gap-1.5 xl:flex"><CalendarDays className="size-3.5 shrink-0 text-white" />Free cancellation before check-in</span>
+          <span className="hidden items-center gap-1.5 xl:flex"><CalendarDays className="size-3.5 shrink-0 text-white" />Free cancellation on most bookings</span>
           <span className="hidden h-3.5 w-px bg-slate-700 lg:block" />
-          <button type="button" onClick={() => navigate('support')} className="hidden items-center gap-1.5 transition-colors hover:text-white lg:flex"><Headset className="size-3.5 text-white" />Help & support</button>
+          <button type="button" onClick={() => navigate('support')} className="hidden items-center gap-1.5 transition-colors hover:text-white lg:flex"><Headset className="size-3.5 text-white" />24/7 Support – We&apos;re always here</button>
         </div>
         <div className="flex shrink-0 items-center gap-3 font-semibold lg:gap-4">
           <button type="button" onClick={() => navigate('support')} className="hidden items-center gap-1.5 hover:text-white xl:flex"><Smartphone className="size-3.5 text-slate-400" />Download App</button>
+          <button type="button" onClick={() => navigate('bookings')} className="hidden items-center gap-1.5 hover:text-white lg:flex"><CalendarDays className="size-3.5 text-slate-400" />My Bookings</button>
           <span className="text-slate-300">PKR</span>
           <label className="flex items-center gap-1.5"><Globe className="size-3.5" /><span className="sr-only">Language</span><Select aria-label="Language" value={language} onChange={(event) => requestLanguageChange(event.target.value as 'en' | 'ur')} className="min-h-8 cursor-pointer bg-transparent text-xs text-slate-200 outline-none"><option value="en">English</option><option value="ur">اردو</option></Select></label>
           {!isStaff && <button type="button" onClick={() => navigate('saved')} className="flex items-center gap-1.5 hover:text-white"><Heart className="size-3.5" /><span className="hidden lg:inline">Wishlist</span></button>}
@@ -114,7 +122,7 @@ export default function Navbar({ currentView, setView, userName, userEmail, isLo
     <div className="relative mx-auto flex min-h-16 max-w-[1440px] items-center justify-between gap-2 px-3 sm:min-h-18 sm:px-4 lg:gap-3 lg:px-6">
       <button type="button" onClick={() => navigate('explore')} aria-label="GBBookings home" className="shrink-0"><GBLogo size="sm" className="sm:hidden" /><GBLogo size="md" className="hidden sm:inline-flex" /></button>
       <nav id="nav-desktop-links" aria-label="Main navigation" className="hidden shrink-0 items-center gap-0.5 text-[13px] font-bold lg:flex xl:gap-1 xl:text-sm">
-        {[...links, { id: 'destinations', label: isRtl ? 'مقامات' : 'Destinations', icon: MapPin }, { id: 'offers', label: isRtl ? 'آفرز' : 'Offers', icon: Tag }].map((link) => <button type="button" key={link.id} onClick={() => navigate(link.id)} onMouseEnter={() => openMega(link.id as MegaTab)} onMouseLeave={leaveMega} onFocus={() => openMega(link.id as MegaTab)} onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); openMega(link.id as MegaTab); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('#nav-mega-menu button')?.focus()); } }} aria-expanded={activeMega === link.id && !megaClosing} aria-controls="nav-mega-menu" aria-current={currentView === link.id ? 'page' : undefined} className={'flex min-h-11 items-center gap-1 border-b-2 px-1 font-bold transition-colors xl:gap-1.5 xl:px-2 ' + (currentView === link.id || (activeMega === link.id && !megaClosing) ? 'border-[#00A651] text-[#00A651]' : 'border-transparent text-slate-800 hover:border-[#00A651] hover:text-[#00A651]')}><link.icon className="size-3.5 shrink-0 text-[#00A651] xl:size-4" />{link.label}</button>)}
+        {[...links, { id: 'destinations', label: isRtl ? 'مقامات' : 'Destinations', icon: MapPin }, { id: 'offers', label: isRtl ? 'آفرز' : 'Offers', icon: Tag }].map((link) => <button type="button" key={link.id} onClick={() => navigate(link.id)} onMouseEnter={() => { if (isMegaTab(link.id)) openMega(link.id); }} onMouseLeave={leaveMega} onFocus={() => { if (isMegaTab(link.id)) openMega(link.id); }} onKeyDown={(event) => { if (event.key === 'ArrowDown' && isMegaTab(link.id)) { event.preventDefault(); openMega(link.id); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('#nav-mega-menu button')?.focus()); } }} aria-expanded={isMegaTab(link.id) && activeMega === link.id && !megaClosing} aria-controls="nav-mega-menu" aria-current={currentView === link.id ? 'page' : undefined} className={'flex min-h-11 items-center gap-1 border-b-2 px-1 font-bold transition-colors xl:gap-1.5 xl:px-2 ' + (currentView === link.id || (activeMega === link.id && !megaClosing) ? 'border-[#00A651] text-[#00A651]' : 'border-transparent text-slate-800 hover:border-[#00A651] hover:text-[#00A651]')}><link.icon className="size-3.5 shrink-0 text-[#00A651] xl:size-4" />{link.label}{link.id === 'offers' && <span className="ml-0.5 rounded-md bg-[#FF3B30] px-1 py-0.5 text-[8px] font-black uppercase tracking-tight text-white shadow-sm xl:px-1.5 xl:text-[9px]">HOT</span>}</button>)}
         <div className="relative" onPointerEnter={(event) => { if (event.pointerType === 'mouse') openMore(); }} onMouseLeave={leaveMore}><button type="button" onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); openMore(); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('#nav-more button')?.focus()); } }} aria-expanded={moreOpen} aria-controls="nav-more" onClick={() => { dismissMega(); clearTimeout(moreTimer.current); setMoreOpen(!moreOpen); setAccountOpen(false); }} className="flex min-h-11 items-center gap-1 px-1 font-bold text-slate-800 hover:text-[#00A651] xl:px-2">More<ChevronDown className="size-3.5 text-slate-500" /></button>{moreOpen && <div id="nav-more" className="absolute left-0 top-full mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">{extraLinks.map((link) => <button key={link.id} type="button" onClick={() => navigate(link.id)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#00A651]"><link.icon className="size-4 text-[#00A651]" />{link.label}</button>)}</div>}</div>
       </nav>
       <div id="nav-actions" className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 xl:gap-3">

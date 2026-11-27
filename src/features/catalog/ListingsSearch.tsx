@@ -1,7 +1,8 @@
 import { HOME_TYPES, HOTEL_TYPES } from '../../shared/utils/rooms';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { MapPin, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, Bed, MapPin, RefreshCw, Search, SlidersHorizontal, Star } from 'lucide-react';
 import type { Listing, ListingType } from '../../types';
+import { handleImageError } from '../../types';
 import { useListings } from '../../shared/hooks/useListings';
 import { EXPERIENCE_TYPES } from '../../shared/api/api';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
@@ -11,7 +12,6 @@ import { readLastStay, saveLastStay } from '../../shared/utils/lastStay';
 import { GUEST_POLICY_LABELS } from '../../shared/utils/stayInfo';
 import { api } from '../../shared/api/api';
 import type { MapPoint } from '../../shared/components/OsmMap';
-import ListingCard from '../../shared/components/ListingCard';
 import Select from '../../shared/components/Select';
 import DateInput from '../../shared/components/DateInput';
 
@@ -342,10 +342,86 @@ export default function ListingsSearch({ type, initialFilters, onSelectListing, 
               <p className="text-xs text-slate-500">Prices are starting prices per {perUnit}. Press a price to open it.{mapPoints.length < listings.length ? ` ${listings.length - mapPoints.length} on this page ${listings.length - mapPoints.length === 1 ? 'has' : 'have'} no pin, so ${listings.length - mapPoints.length === 1 ? 'it isn’t' : 'they aren’t'} shown.` : ''}</p>
             </div>
           ) : (
-            <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
-              {listings.map((listing) => (
-                <ListingCard key={listing.id} listing={listing} tag={listing.featured ? 'Featured' : undefined} detailed onSelect={() => onSelectListing(listing)} />
-              ))}
+            // Horizontal result cards restored from 5372888^ (generic results view):
+            // thumbnail left, details right, price block at the foot. All figures
+            // are the live listing's own — price, rating, review count, rooms left.
+            <div className={`space-y-4 transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
+              {listings.map((listing) => {
+                const chips = listing.type === 'car' && listing.carSpecs
+                  ? [`${listing.carSpecs.category}`, `${listing.carSpecs.transmission}`, `${listing.carSpecs.seats} seats`]
+                  : listing.type === 'tour' && listing.tourSpecs
+                    ? [`${listing.tourSpecs.durationDays} day${listing.tourSpecs.durationDays === 1 ? '' : 's'}`]
+                    : [...(listing.hotelSpecs?.amenities ?? []), ...(listing.homestaySpecs?.amenities ?? [])].slice(0, 2);
+                return (
+                  <article
+                    key={listing.id}
+                    onClick={() => onSelectListing(listing)}
+                    className="bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-emerald-500/60 transition-all duration-300 flex flex-col sm:flex-row cursor-pointer group shadow-xs hover:shadow-md"
+                  >
+                    <div className="relative w-full sm:w-56 h-44 sm:h-auto overflow-hidden shrink-0 bg-slate-100">
+                      <img
+                        src={listing.image}
+                        alt={listing.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={handleImageError}
+                      />
+                      {listing.featured && <span className="absolute top-2 left-2 bg-white/95 border border-slate-100 text-slate-800 px-2.5 py-0.5 rounded-md text-[10px] font-bold shadow-xs uppercase tracking-wider">Featured</span>}
+                      {listing.type === 'hotel' && listing.hotelSpecs?.roomsAvailable ? (
+                        <span className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur-md text-white px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 border border-white/20">
+                          <Bed className="w-3 h-3 text-emerald-400" />{listing.hotelSpecs.roomsAvailable} Rooms Left
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-3 min-w-0">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-[#006F3C] shrink-0" />{listing.location}
+                          </p>
+                          {listing.reviewsCount > 0 ? (
+                            <span className="flex items-center gap-1 text-xs font-bold text-slate-800 shrink-0">
+                              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />{listing.rating}
+                              <span className="font-normal text-slate-400">({listing.reviewsCount})</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs font-medium text-[#006F3C] shrink-0">New</span>
+                          )}
+                        </div>
+                        <h3 className="text-base font-bold text-slate-900 group-hover:text-[#006F3C] transition-colors leading-tight">{listing.title}</h3>
+                        {listing.hotelSpecs?.stars ? <p className="text-xs font-medium text-slate-600"><span aria-hidden="true" className="text-amber-500">{'★'.repeat(listing.hotelSpecs.stars)}</span> {listing.hotelSpecs.stars}-star hotel</p> : null}
+                        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{listing.description}</p>
+                      </div>
+
+                      <div className="flex items-end justify-between pt-2 border-t border-slate-100 gap-3">
+                        <div className="flex flex-wrap gap-1.5 min-w-0">
+                          {chips.map((chip) => (
+                            <span key={chip} className="bg-slate-50 border border-slate-200 px-2 py-0.5 rounded text-[10px] text-slate-600 font-semibold">{chip}</span>
+                          ))}
+                        </div>
+                        <div className="text-right shrink-0">
+                          {listing.stayTotal !== undefined ? (
+                            <>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total for {listing.stayNights} night{listing.stayNights === 1 ? '' : 's'}</p>
+                              <p className="text-base font-bold text-slate-900">PKR {listing.stayTotal.toLocaleString()}</p>
+                              <p className="text-[11px] text-slate-500">Includes fees and taxes</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Starts from</p>
+                              <p className="text-base font-bold text-slate-900">PKR {listing.price.toLocaleString()} <span className="text-xs font-normal text-slate-500">/ {perUnit}</span></p>
+                              <p className="text-[11px] text-slate-500">Taxes &amp; fees at checkout</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-[#006F3C]">View details <ArrowRight className="w-3.5 h-3.5" /></span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </main>

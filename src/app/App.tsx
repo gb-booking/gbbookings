@@ -21,6 +21,7 @@ const CarsSection = lazy(() => import('../features/catalog/CarsSection'));
 const ToursSection = lazy(() => import('../features/catalog/ToursSection'));
 const OffersSection = lazy(() => import('../features/catalog/OffersSection'));
 const DestinationsSection = lazy(() => import('../features/catalog/DestinationsSection'));
+const TravelAgenciesSection = lazy(() => import('../features/catalog/TravelAgenciesSection'));
 const ListingDetails = lazy(() => import('../features/catalog/ListingDetails'));
 const CheckoutFlow = lazy(() => import('../features/booking/CheckoutFlow'));
 const UserDashboard = lazy(() => import('../features/account/UserDashboard'));
@@ -57,7 +58,7 @@ const homeDashboard = (roles: string[]) =>
 
 // URL <-> view sync so refresh, deep links and the browser Back button work.
 // ponytail: hand-rolled History API routing; move to a router library if routes need more params than a listing id.
-const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'offers', 'bookings', 'payments', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
+const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'agencies', 'offers', 'bookings', 'payments', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
 const SEARCH_TYPES = ['hotel', 'car', 'tour', 'homestay', 'destination', 'offer'] as const;
 type SearchType = typeof SEARCH_TYPES[number];
 
@@ -556,6 +557,13 @@ export default function App() {
 
         {view === 'destinations' && (
           <DestinationsSection 
+            onTriggerSearch={handleTriggerSearch}
+            setView={handleNavigation}
+          />
+        )}
+
+        {view === 'agencies' && (
+          <TravelAgenciesSection
             onTriggerSearch={handleTriggerSearch}
             setView={handleNavigation}
           />

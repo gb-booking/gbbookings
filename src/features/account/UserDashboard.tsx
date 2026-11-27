@@ -6,7 +6,7 @@ import BookingSupportDialog from './BookingSupportDialog';
 import ChangeEmailDialog from './ChangeEmailDialog';
 import { openPaymentTab, PaymentWaiting, sendToPayment } from '../booking/paymentTab';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ArrowRight, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Heart, LoaderCircle, MapPin, MessageSquare, RefreshCw, Star, Trash2, X } from 'lucide-react';
+import { ArrowRight, Award, Bell, Building2, Calendar, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Heart, LoaderCircle, MapPin, MessageSquare, RefreshCw, Star, Trash2, Wallet, X } from 'lucide-react';
 import type { Booking, Listing } from '../../types';
 import { handleImageError } from '../../types';
 import { api, ApiError, type AuthUser, type Paginated, type VendorProfile } from '../../shared/api/api';
@@ -44,7 +44,139 @@ const BUSINESS_LABEL: Record<string, string> = { hotel: 'Hotel business', homest
 
 export default function UserDashboard(props: UserDashboardProps) {
   return <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 animate-fadeIn pb-8">
-    {props.section === 'bookings' ? <BookingsPage {...props} /> : props.section === 'saved' ? <SavedPage {...props} /> : <ProfilePage {...props} />}
+    <DashboardShell {...props}>
+      {props.section === 'bookings' ? <BookingsPage {...props} /> : props.section === 'saved' ? <SavedPage {...props} /> : <ProfilePage {...props} />}
+    </DashboardShell>
+  </div>;
+}
+
+/**
+ * Restored header/stats/tabs from src/components/UserDashboard.tsx at
+ * 5372888^ (initials + name + loyalty badge, Active Bookings / Wallet /
+ * Loyalty Coins stats, My Bookings / Saved Wishlist / My Wallet /
+ * Rewards & Referrals / Alerts tabs), wired to the CURRENT api only.
+ *
+ * Deleted, never restored: the old file's hardcoded wallet (Rs.14,500,
+ * tx-1 50,000 deposit, tx-2 105,000 payment, tx-3 5,000 referral bonus),
+ * the hardcoded referral metrics (12 friends, 1 approved, PKR 5,000,
+ * invite/AR105) and the "Gold Loyalty" badge. There is no guest wallet-balance
+ * endpoint in the current api, so the stats show real loyalty points instead
+ * of a balance, and My Wallet opens /payments (GuestPayments: real payments
+ * and refunds) while Rewards & Referrals opens /loyalty (GuestLoyalty: real
+ * points, tier and referral code). There is also no guest notifications
+ * endpoint (the old /api/notifications is gone), so Alerts opens an inline
+ * panel that says so instead of a fake list.
+ */
+function DashboardShell({ children, userEmail, userName, setView, section }: UserDashboardProps & { children: ReactNode }) {
+  const [loyalty, setLoyalty] = useState<{ points: number; tier: string; trips: number } | null>(null);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [activeBookings, setActiveBookings] = useState<number | null>(null);
+  const [trips, setTrips] = useState<number | null>(null);
+  const [savedCount, setSavedCount] = useState(0);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.guestConsole.loyalty().then((result) => { if (active) setLoyalty(result); }).catch(() => undefined);
+    api.getCurrentUser().then(({ user }) => { if (active) setEmailVerified(user.emailVerified === true); }).catch(() => undefined);
+    Promise.all([api.getBookingsPage(1, 'upcoming'), api.getBookingsPage(1, 'past')]).then(([upcoming, past]) => {
+      if (!active) return;
+      setActiveBookings(upcoming.data.filter((booking) => booking.status === 'confirmed').length);
+      setTrips(past.pagination.total);
+    }).catch(() => undefined);
+    api.getWishlist().then((items) => { if (active) setSavedCount(items.length); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [userEmail]);
+
+  const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'Traveler');
+  const userInitials = displayName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() || 'GB';
+  const activeTab = section === 'bookings' ? 'trips' : section === 'saved' ? 'wishlist' : alertsOpen ? 'notifications' : null;
+  const tabs = [
+    { id: 'trips', label: 'My Bookings', icon: Calendar, onClick: () => { setAlertsOpen(false); setView('bookings'); } },
+    { id: 'wishlist', label: 'Saved Wishlist', icon: Heart, count: savedCount, onClick: () => { setAlertsOpen(false); setView('saved'); } },
+    { id: 'wallet', label: 'My Wallet', icon: Wallet, onClick: () => { setAlertsOpen(false); setView('payments'); } },
+    { id: 'rewards', label: 'Rewards & Referrals', icon: Award, onClick: () => { setAlertsOpen(false); setView('loyalty'); } },
+    { id: 'notifications', label: 'Alerts', icon: Bell, onClick: () => setAlertsOpen(true) },
+  ] as const;
+
+  return <>
+    {/* Header Profile Summary */}
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 sm:gap-6 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs" id="user-profile-header">
+      <div className="flex items-center space-x-3.5 sm:space-x-4">
+        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-lg bg-[#0F172A] flex items-center justify-center font-bold text-white text-xl sm:text-2xl shadow-xs shrink-0">
+          {userInitials}
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-900 flex flex-wrap items-center gap-2 uppercase tracking-tight">
+            <span>{displayName}</span>
+            {loyalty && <span className="bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">{loyalty.tier} Loyalty</span>}
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5 truncate">{userEmail}{emailVerified ? ' • Verified Traveler' : ''}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 min-[480px]:grid-cols-3 gap-2.5 sm:gap-4" id="dashboard-metrics-summary">
+        <div className="bg-slate-50 border border-slate-200 p-3 sm:p-3.5 rounded-lg text-center shadow-xs">
+          <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Active Bookings</span>
+          <span className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5 sm:mt-1 block font-mono">{activeBookings === null ? '—' : `${activeBookings} Active`}</span>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 p-3 sm:p-3.5 rounded-lg text-center shadow-xs">
+          <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Loyalty Points</span>
+          <span className="text-xs sm:text-sm font-bold text-indigo-600 mt-0.5 sm:mt-1 block font-mono">{loyalty === null ? '—' : `${loyalty.points.toLocaleString()} pts`}</span>
+        </div>
+        <div className="col-span-2 min-[480px]:col-span-1 bg-slate-50 border border-slate-200 p-3 sm:p-3.5 rounded-lg text-center shadow-xs">
+          <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Trips</span>
+          <span className="text-xs sm:text-sm font-bold text-amber-600 mt-0.5 sm:mt-1 block font-mono">{trips === null ? '—' : `${trips} trip${trips === 1 ? '' : 's'}`}</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Tabs Controller */}
+    <div className="flex border-b border-slate-200 pb-1.5 space-x-3 sm:space-x-6 overflow-x-auto touch-scroll-x scrollbar-none" id="dashboard-tabs-bar">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            id={`tab-dash-${tab.id}`}
+            onClick={tab.onClick}
+            className={`min-h-[44px] px-2 sm:px-3 pb-3 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center space-x-2 relative whitespace-nowrap shrink-0 ${
+              isActive ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Icon className="w-4 h-4 shrink-0" />
+            <span>{tab.label}</span>
+            {'count' in tab && tab.count > 0 && (
+              <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full font-mono">{tab.count}</span>
+            )}
+            {isActive && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+
+    {alertsOpen ? <AlertsPanel onBack={() => setAlertsOpen(false)} onInbox={() => setView('inbox')} /> : children}
+  </>;
+}
+
+/** No guest notifications endpoint exists in the current api (the old
+    /api/notifications is gone), so Alerts states that plainly instead of
+    showing a fake list. Booking updates arrive by email; partner messages
+    land in the inbox. */
+function AlertsPanel({ onBack, onInbox }: { onBack: () => void; onInbox: () => void }) {
+  return <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-slate-200 shadow-xs" id="dash-notifications-pane">
+    <Bell className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+    <h3 className="text-base font-bold text-slate-900">No alerts here yet</h3>
+    <p className="text-sm text-slate-500 leading-relaxed max-w-md mx-auto mt-2">
+      There is no alerts feed for guests in the current API, so nothing is listed here. Booking updates arrive by email, and messages from partners land in your inbox.
+    </p>
+    <div className="flex flex-wrap justify-center gap-2 mt-6">
+      <button type="button" onClick={onInbox} className={primaryButton}>Open inbox</button>
+      <button type="button" onClick={onBack} className={secondaryButton}>Back to My Bookings</button>
+    </div>
   </div>;
 }
 

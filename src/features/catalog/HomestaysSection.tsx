@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Check, Heart, Home, MapPin, Mountain, Send, Star, User, Users, Wallet, Waves } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Heart, Home, MapPin, Mountain, Percent, QrCode, Quote, Send, Star, User, Users, Wallet, Waves } from 'lucide-react';
 import { Listing, handleImageError } from '../../types';
 import { useListings } from '../../shared/hooks/useListings';
 import { useWishlist } from '../../shared/hooks/useWishlist';
@@ -23,6 +23,28 @@ const DESTINATIONS = [
 // Counted on the first word ("Hunza" matches "Altit, Hunza").
 const placeKey = (name: string) => name.split(' ')[0];
 
+// Testimonials restored verbatim from 5372888^.
+const TESTIMONIALS = [
+  {
+    name: 'Ahmad Raza',
+    location: 'Lahore, Pakistan',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+    text: 'The homestay was amazing! The family was incredibly welcoming and the home-cooked food was delicious. Felt like a home away from home.',
+  },
+  {
+    name: 'Sara Khan',
+    location: 'Islamabad, Pakistan',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
+    text: 'Staying with a local family gave us a true insight into the culture and lifestyle. Highly recommended for anyone visiting GB!',
+  },
+  {
+    name: 'Omar Ali',
+    location: 'Karachi, Pakistan',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+    text: 'Beautiful location, peaceful environment and very supportive hosts. Will definitely visit again!',
+  },
+];
+
 const experiences = [
   { id: 'mountain-view', title: 'Mountain View', subtitle: 'Rooms that face the peaks', icon: Mountain, bgImage: 'https://images.unsplash.com/photo-1542718610-a1d656d1884c?auto=format&fit=crop&w=800&q=80' },
   { id: 'family-friendly', title: 'Family Friendly', subtitle: 'Homes with room for the whole family', icon: Users, bgImage: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80' },
@@ -41,23 +63,52 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
   const wishlist = useWishlist();
 
   const [destination, setDestination] = useState('Hunza Valley');
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
+  const [checkIn, setCheckIn] = useState('2025-05-20');
+  const [checkOut, setCheckOut] = useState('2025-05-23');
   const [guestCount, setGuestCount] = useState(2);
   const [roomCount, setRoomCount] = useState(1);
+  const [testimonialShift, setTestimonialShift] = useState(0);
   const homestaysIn = (place: string) => counts[placeKey(place)] ?? 0;
 
   return (
     <div className="space-y-12 pb-20 text-left" id="homestays-page-container">
-      <LandingHero
-        id="homestay"
-        image="https://images.unsplash.com/photo-1542718610-a1d656d1884c?auto=format&fit=crop&w=2000&q=80"
-        alt="Authentic Homestay Chalet in Gilgit Baltistan"
-        icon={Home}
-        eyebrow="Stay Local. Feel at Home."
-        title={<>Authentic Homestays in <span className="text-emerald-300">Gilgit Baltistan</span></>}
-        subtitle="Rooms in family homes across the valleys, hosted by the people who live there"
-      />
+      <div className="relative">
+        <LandingHero
+          id="homestay"
+          image="https://images.unsplash.com/photo-1542718610-a1d656d1884c?auto=format&fit=crop&w=2000&q=80"
+          alt="Authentic Homestay Chalet in Gilgit Baltistan"
+          icon={Home}
+          eyebrow="Stay Local. Feel at Home."
+          title={<>Authentic Homestays in <span className="text-emerald-300">Gilgit Baltistan</span></>}
+          subtitle="Rooms in family homes across the valleys, hosted by the people who live there"
+        />
+        {/* Promo card restored from 5b7dd1c^ (removed by "refactor: remove promo cards from section components").
+            The demo's "Stay Longer, Save More!" banner is a separate section below; this side card's history
+            wording is SPECIAL HOMESTAY OFFERS / UP TO 35% OFF / on local village stays. */}
+        <div className="absolute right-6 bottom-6 z-20 hidden lg:block">
+          <div className="bg-gradient-to-br from-[#0B5D3E] via-[#0D6E4A] to-[#043E28] rounded-3xl p-5 border border-[#16A34A]/35 text-white shadow-2xl relative overflow-hidden flex justify-between gap-4 max-w-md ml-auto">
+            <div className="flex flex-col justify-between z-10 py-1 space-y-3">
+              <div>
+                <span className="inline-block bg-gradient-to-r from-[#FF7D29] to-[#EA580C] text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider mb-2 shadow-sm">
+                  SPECIAL HOMESTAY OFFERS
+                </span>
+                <p className="text-white/80 text-[11px] font-bold tracking-widest uppercase">UP TO</p>
+                <h3 className="text-4xl font-black text-white tracking-tighter leading-none mt-0.5">35% OFF</h3>
+                <p className="text-white/80 text-xs font-semibold mt-1.5">on local village stays</p>
+              </div>
+            </div>
+            <div className="relative w-36 h-32 shrink-0 rounded-2xl overflow-hidden shadow-lg border border-white/15 z-10 self-center">
+              <img
+                src="https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=400&q=80"
+                alt="Homestay promo"
+                className="w-full h-full object-cover rounded-2xl"
+                referrerPolicy="no-referrer"
+                onError={handleImageError}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
 
       <SearchConsole
         id="homestay"
@@ -315,6 +366,134 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
         </div>
       </section>
 
+      {/* 6. WHAT OUR GUESTS SAY (TESTIMONIALS) — restored from 5372888^ */}
+      <section className="space-y-5 pt-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              What Our <span className="text-[#006F3C]">Guests</span> Say
+            </h3>
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200/80 rounded-full text-xs font-bold text-[#006F3C]">
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 stroke-none" />
+              <span>4.8</span>
+              <span className="text-slate-500 text-[10px] font-normal">Based on 2,348+ reviews</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-label="Previous testimonials"
+              onClick={() => setTestimonialShift((value) => (value + 2) % 3)}
+              className="p-2 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Next testimonials"
+              onClick={() => setTestimonialShift((value) => (value + 1) % 3)}
+              className="p-2 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {TESTIMONIALS.map((_, idx) => {
+            const entry = TESTIMONIALS[(idx + testimonialShift) % TESTIMONIALS.length];
+            return (
+              <div key={entry.name} className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3 relative flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={entry.avatar}
+                        alt={entry.name}
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                      />
+                      <div>
+                        <h5 className="font-bold text-slate-900 text-sm">{entry.name}</h5>
+                        <p className="text-[11px] text-slate-500">{entry.location}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400 stroke-none" />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed font-normal italic">
+                    &ldquo;{entry.text}&rdquo;
+                  </p>
+                </div>
+                <div className="self-end pt-2 text-[#006F3C]/20">
+                  <Quote className="w-6 h-6 rotate-180" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 7. STAY LONGER, SAVE MORE PROMO BANNER — restored from 5372888^ */}
+      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-slate-950 via-[#004d2a] to-[#006F3C] text-white shadow-xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 items-center">
+          <div className="lg:col-span-7 p-6 sm:p-10 space-y-5 z-10">
+            <div className="space-y-2">
+              <h3 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-tight">
+                Stay Longer, <span className="text-[#4ade80]">Save More!</span>
+              </h3>
+              <p className="text-slate-200 text-xs sm:text-sm max-w-lg font-medium">
+                Get exclusive discounts on extended homestay bookings.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 pt-1">
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-xs font-bold">
+                <Percent className="w-4 h-4 text-[#4ade80]" />
+                <span><strong className="text-[#4ade80]">10% OFF</strong> on 3+ Nights</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-xs font-bold">
+                <Percent className="w-4 h-4 text-[#4ade80]" />
+                <span><strong className="text-[#4ade80]">15% OFF</strong> on 7+ Nights</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/20 text-xs font-bold">
+                <Percent className="w-4 h-4 text-[#4ade80]" />
+                <span><strong className="text-[#4ade80]">20% OFF</strong> on 14+ Nights</span>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onTriggerSearch) {
+                    onTriggerSearch({ type: 'offer' });
+                  }
+                }}
+                className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center gap-2"
+              >
+                <span>Explore Deals</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 h-48 lg:h-full relative overflow-hidden min-h-[220px]">
+            <img
+              src="https://images.unsplash.com/photo-1542718610-a1d656d1884c?auto=format&fit=crop&w=1000&q=80"
+              alt="Mountain Balcony Homestay View"
+              className="w-full h-full object-cover object-center"
+              referrerPolicy="no-referrer"
+              onError={handleImageError}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#004d2a] via-transparent to-transparent lg:block hidden" />
+          </div>
+        </div>
+      </section>
+
       {/* 7. PAY AT THE PROPERTY BANNER */}
       <section className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-slate-950 via-[#004d2a] to-[#006F3C] text-white shadow-md">
         <div className="grid grid-cols-1 lg:grid-cols-12 items-center">
@@ -371,8 +550,8 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
         </div>
       </section>
 
-      {/* 8. NEWSLETTER */}
-      <section className="max-w-2xl">
+      {/* 8. NEWSLETTER & APP DOWNLOAD CARDS — restored from 5372888^ (app card was dropped in the current version) */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Subscribe to Newsletter */}
         <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-8 space-y-4 shadow-2xs flex flex-col justify-between">
           <div className="space-y-2">
@@ -388,6 +567,44 @@ export default function HomestaysSection({ onSelectListing, onTriggerSearch }: H
           </div>
 
           <NewsletterForm />
+        </div>
+
+        {/* Download App */}
+        <div className="bg-slate-50 rounded-2xl border border-slate-200/90 p-6 sm:p-8 space-y-4 shadow-2xs flex items-center justify-between gap-4 overflow-hidden relative">
+          <div className="space-y-3 max-w-xs z-10">
+            <h4 className="text-xl font-semibold text-slate-900 leading-tight">
+              Download the <span className="text-[#006F3C]">GBBookings</span> App
+            </h4>
+            <p className="text-xs text-slate-500 leading-relaxed font-medium">
+              Book homestays on the go, anytime, anywhere!
+            </p>
+
+            <div className="flex items-center gap-3 pt-1">
+              <div className="p-1.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                <QrCode className="w-10 h-10 text-slate-800" />
+              </div>
+              <div className="space-y-1">
+                <span className="block text-[10px] font-bold text-slate-700 bg-white px-2 py-1 rounded-md border border-slate-200">
+                  Google Play
+                </span>
+                <span className="block text-[10px] font-bold text-slate-700 bg-white px-2 py-1 rounded-md border border-slate-200">
+                  App Store
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-28 sm:w-36 shrink-0 z-10">
+            <div className="bg-slate-900 rounded-2xl p-2 shadow-xl border-2 border-slate-800">
+              <div className="bg-emerald-700 h-32 rounded-lg p-2 text-white text-[8px] space-y-1 flex flex-col justify-between">
+                <span className="font-bold">GBBookings</span>
+                <span className="text-[7px]">Find Perfect Stay in GB</span>
+                <div className="bg-white/20 rounded p-1">
+                  Homestays ⭐ 4.8
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
