@@ -2,11 +2,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { toast } from '../../shared/components/Toaster';
 import BookingsPanel from './BookingsPanel';
 import SupportPanel from './SupportPanel';
-import { BookOpenCheck, LifeBuoy, Banknote, Undo2, AlertTriangle, Building2, CalendarX, CheckCircle2, XCircle, Car, Percent, Hotel, House, Inbox, LayoutDashboard, Mountain, PanelLeftClose, PanelLeftOpen, Search, FileText, LoaderCircle, LogOut, ShieldCheck, Star, Users,
+import { BookOpenCheck, Languages, LifeBuoy, Banknote, Undo2, AlertTriangle, Building2, CalendarX, CheckCircle2, XCircle, Car, Percent, Hotel, House, Inbox, LayoutDashboard, MessageSquare, Mountain, PanelLeftClose, PanelLeftOpen, Search, Settings, FileText, LoaderCircle, LogOut, ShieldCheck, Star, Users,
   BarChart3, Bell, Bot, Compass, Contact, Fingerprint, Gift, History, Image, KeyRound, ListChecks, ListTodo, MapPin, Megaphone, Receipt, RefreshCw, ScrollText, Shield, ShieldAlert, UserCog, Workflow } from 'lucide-react';
 import { RefundsPanel, PayoutsPanel } from './FinancePanels';
 import { AuditPanel, FeatureAuditPanel, PermissionsPanel, ROLE_NAMES } from './ConsolePanels';
-import { AiCenterPage, AiControlPage, AiSupportPage, AutomationsPage, ChannelFeedsPage, CustomRolesPage, CustomersPage, DestinationsPage, ForecastPage, FraudPage, GuidesPage, MarketingPage, MediaPage, NotificationsPage, PaymentRequestsPage, ReportsPage, SecurityCenterPage, TasksPage } from './ConsolePages';
+import { AiCenterPage, AiControlPage, AiPlannerAdminPage, AiSupportPage, AutomationsPage, ChannelFeedsPage, CustomRolesPage, CustomersPage, DestinationsPage, ForecastPage, FraudPage, GuidesPage, LanguageCurrencyPage, MarketingPage, MediaPage, NotificationsPage, PaymentRequestsPage, PlatformSettingsPage, ReportsPage, SecurityCenterPage, SupportOverviewPage, TasksPage } from './ConsolePages';
 import { AssistantChat } from '../vendor/AiTools';
 import { api, type CustomRole, type AdminBookingLookup, type AdminUser, type AdminVendor, type IdentityCheck, type ListingKind, type Paginated, type PlatformSettings, type StaffRole, type UserStatusAction, type VendorListing } from '../../shared/api/api';
 import SecurityPanel from '../account/SecurityPanel';
@@ -32,6 +32,7 @@ const NEEDS: Record<string, string> = {
   reports: 'booking:read', marketing: 'user:manage', 'ai-center': 'listing:moderate', 'ai-control': 'user:manage', 'ai-support': 'support:manage',
   permissions: 'user:manage', 'custom-roles': 'user:manage', audit: 'audit:read', 'security-log': 'audit:read', activity: 'audit:read', 'security-center': 'user:manage',
   automation: 'audit:read', media: 'listing:moderate', 'channel-manager': 'listing:moderate', 'feature-audit': 'user:manage',
+  'ai-planner': 'planner:read', disputes: 'booking:read', messages: 'support:manage', 'language-currency': 'platform:manage', 'platform-settings': 'platform:manage', 'payout-control': 'finance:manage', 'ai-assistant': 'support:manage',
 };
 const nav = (id: string, label: string, icon: typeof Users): NavItem => ({ id, label, icon });
 
@@ -49,33 +50,35 @@ const MENUS: Record<StaffRole, NavGroup[]> = {
   admin: [
     { items: [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'inbox', label: 'Review inbox', icon: Inbox }, NOTIFICATIONS] },
     { title: 'Products', items: [...PRODUCT_ITEMS, nav('guides', 'Guides', Compass), nav('destinations', 'Destinations', MapPin)] },
-    { title: 'Bookings', items: [{ id: 'bookings', label: 'All bookings', icon: BookOpenCheck }, { id: 'support', label: 'Support', icon: LifeBuoy }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
+    { title: 'Bookings', items: [{ id: 'bookings', label: 'All bookings', icon: BookOpenCheck }, { id: 'disputes', label: 'Disputes', icon: AlertTriangle }, { id: 'support', label: 'Support', icon: LifeBuoy }, { id: 'messages', label: 'Messages', icon: MessageSquare }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
     { title: 'People', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'customers', label: 'Customers', icon: Users }, { id: 'staff', label: 'Staff', icon: UserCog }, { id: 'users', label: 'All users', icon: Users }, { id: 'reviews', label: 'Guest reviews', icon: Star }, nav('crm', 'CRM', Contact), nav('loyalty', 'Loyalty', Gift)] },
-    { title: 'Money', items: [{ id: 'settings', label: 'Commission & fees', icon: Percent }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'payouts', label: 'Payouts', icon: Banknote }, nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert)] },
-    { title: 'Growth', items: [nav('reports', 'Reports', BarChart3), nav('marketing', 'Marketing', Megaphone), nav('ai-center', 'AI center', Bot), nav('ai-control', 'AI control center', Bot)] },
+    { title: 'Money', items: [{ id: 'settings', label: 'Commission & fees', icon: Percent }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'payouts', label: 'Payouts', icon: Banknote }, { id: 'payout-control', label: 'Payout control center', icon: Banknote }, nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert)] },
+    { title: 'Growth', items: [nav('reports', 'Reports', BarChart3), nav('marketing', 'Marketing', Megaphone), nav('ai-center', 'AI center', Bot), nav('ai-planner', 'AI planner', Bot), nav('ai-control', 'AI control center', Bot)] },
     { title: 'Platform', items: [
       { id: 'permissions', label: 'Permissions', icon: KeyRound }, nav('custom-roles', 'Custom roles', UserCog), { id: 'audit', label: 'Audit logs', icon: ScrollText },
       { id: 'security-log', label: 'Security log', icon: Fingerprint }, nav('security-center', 'Security center', Shield), nav('automation', 'Automation center', Workflow),
       nav('media', 'Media & documents', Image), nav('channel-manager', 'Channel manager', RefreshCw), TASKS, { id: 'feature-audit', label: 'Feature audit', icon: ListChecks },
+      nav('platform-settings', 'Platform settings', Settings), nav('language-currency', 'Language & currency', Languages),
     ] },
     { title: 'You', items: [ACCOUNT] },
   ],
   operations_manager: [
     { items: [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'inbox', label: 'Listing approvals', icon: Inbox }] },
     { title: 'Products', items: PRODUCT_ITEMS },
-    { title: 'Bookings', items: [{ id: 'bookings', label: 'Bookings', icon: BookOpenCheck }, { id: 'support', label: 'Complaints & messages', icon: LifeBuoy }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
+    { title: 'Bookings', items: [{ id: 'bookings', label: 'Bookings', icon: BookOpenCheck }, { id: 'support', label: 'Complaints & messages', icon: LifeBuoy }, { id: 'messages', label: 'Messages', icon: MessageSquare }, { id: 'cancellations', label: 'Cancel a booking', icon: CalendarX }] },
     { title: 'Partners', items: [{ id: 'vendors', label: 'Partners', icon: Building2 }, { id: 'reviews', label: 'Reviews', icon: Star }] },
-    { title: 'Work', items: [NOTIFICATIONS, nav('payment-requests', 'Payment requests', Receipt), TASKS, nav('reports', 'Reports', BarChart3), nav('ai-assistant', 'AI assistant', Bot)] },
+    { title: 'Work', items: [NOTIFICATIONS, nav('payment-requests', 'Payment requests', Receipt), { id: 'refunds', label: 'Refunds', icon: Undo2 }, TASKS, nav('reports', 'Reports', BarChart3), nav('ai-assistant', 'AI assistant', Bot)] },
     { title: 'You', items: [ACTIVITY, ACCOUNT] },
   ],
   finance_manager: [
     { title: 'Money', items: [{ id: 'payouts', label: 'Payout control center', icon: Banknote }, { id: 'transactions', label: 'Transactions', icon: BookOpenCheck }, { id: 'refunds', label: 'Refunds', icon: Undo2 }, { id: 'settings', label: 'Commission & fees', icon: Percent }] },
-    { title: 'Review', items: [nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert), nav('reports', 'Reports', BarChart3), nav('ai-forecast', 'AI forecast', Bot)] },
+    { title: 'Review', items: [{ id: 'disputes', label: 'Disputes', icon: AlertTriangle }, nav('payment-requests', 'Payment requests', Receipt), nav('fraud', 'Fraud review', ShieldAlert), nav('reports', 'Reports', BarChart3), nav('ai-forecast', 'AI forecast', Bot), nav('ai-assistant', 'AI assistant', Bot)] },
     { title: 'You', items: [NOTIFICATIONS, TASKS, ACTIVITY, ACCOUNT] },
   ],
   support_agent: [
-    { title: 'Support', items: [{ id: 'support', label: 'Tickets & messages', icon: LifeBuoy }, { id: 'transactions', label: 'Bookings', icon: BookOpenCheck }] },
-    { title: 'Tools', items: [NOTIFICATIONS, nav('crm', 'CRM', Contact), nav('ai-support', 'AI support', Bot), TASKS] },
+    { items: [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }] },
+    { title: 'Support', items: [{ id: 'support', label: 'Tickets & messages', icon: LifeBuoy }, { id: 'disputes', label: 'Disputes', icon: AlertTriangle }, { id: 'messages', label: 'Messages', icon: MessageSquare }, { id: 'transactions', label: 'Bookings', icon: BookOpenCheck }] },
+    { title: 'Tools', items: [NOTIFICATIONS, nav('crm', 'CRM', Contact), nav('ai-support', 'AI support', Bot), nav('ai-assistant', 'AI assistant', Bot), TASKS] },
     { title: 'You', items: [ACCOUNT] },
   ],
 };
@@ -982,10 +985,16 @@ const sectionDetails: Record<Tab, { title: string; description: string }> = {
   loyalty: { title: 'Loyalty', description: 'Guest points, tiers and referral codes.' },
   marketing: { title: 'Marketing', description: 'Newsletter subscribers for campaigns.' },
   'ai-center': { title: 'AI center', description: 'AI suggestions for listings, support, forecasts and partners.' },
+  'ai-planner': { title: 'AI planner', description: 'What guests asked the trip planner, and which places it recommended.' },
   'ai-control': { title: 'AI control center', description: 'AI usage per feature over the last 30 days, with a switch for each.' },
   'ai-assistant': { title: 'AI assistant', description: 'Ask how to do something in the console.' },
   'ai-forecast': { title: 'AI forecast', description: 'The next four weeks: what is already booked, and a projection from recent weeks.' },
   'ai-support': { title: 'AI support', description: 'Draft replies to open support cases.' },
+  disputes: { title: 'Disputes', description: 'Guests disputing a no-show. Decide each one; the guest and the partner are emailed your decision.' },
+  messages: { title: 'Messages', description: 'Guest messages and reported chats that need a reply.' },
+  'language-currency': { title: 'Language & currency', description: 'Which languages guests can use, and which currencies prices are shown in.' },
+  'platform-settings': { title: 'Platform settings', description: 'Website name, support contacts, default currency and time zone.' },
+  'payout-control': { title: 'Payout control center', description: 'What each partner is owed or owes, the statements you have issued, and the totals to check against the payment provider and the bank.' },
   'custom-roles': { title: 'Custom roles', description: 'Extra staff roles built from the permissions, such as a regional manager.' },
   'security-center': { title: 'Security center', description: 'Every staff account: two-step sign-in, signed-in devices and lockouts.' },
   automation: { title: 'Automation center', description: 'What GBBookings does on its own, and how often.' },
@@ -1086,7 +1095,11 @@ export default function AdminDashboard({ roles, permissions = [], userName = 'St
         </div>
       </nav>
       <main id="admin-content" className="min-w-0 flex-1 space-y-6 px-4 pb-12 pt-7 sm:px-8">
-        {tab === 'overview' && <>
+        {tab === 'overview' && staffRole === 'support_agent' && <>
+          <div><h1 className="text-3xl font-extrabold tracking-tight">Overview</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#5B6B61]">What is waiting for the support team, and the oldest open cases.</p></div>
+          <SupportOverviewPage onOpen={navigate} />
+        </>}
+        {tab === 'overview' && staffRole !== 'support_agent' && <>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-sm font-semibold text-[#5B6B61]">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
@@ -1109,6 +1122,12 @@ export default function AdminDashboard({ roles, permissions = [], userName = 'St
           {tab === 'customers' && <UsersPanel key="customers" initialRole="customer" />}
           {tab === 'staff' && <UsersPanel key="staff" initialRole="staff" />}
           {tab === 'bookings' && <BookingsPanel onChanged={() => setSummaryRevision((value) => value + 1)} />}
+          {tab === 'disputes' && <BookingsPanel initialView="disputes" readOnly={staffRole === 'finance_manager' || staffRole === 'support_agent'} onChanged={() => setSummaryRevision((value) => value + 1)} />}
+          {tab === 'messages' && <SupportPanel onChanged={() => setSummaryRevision((value) => value + 1)} />}
+          {tab === 'payout-control' && <PayoutsPanel />}
+          {tab === 'ai-planner' && <AiPlannerAdminPage />}
+          {tab === 'platform-settings' && <PlatformSettingsPage />}
+          {tab === 'language-currency' && <LanguageCurrencyPage />}
           {tab === 'transactions' && <BookingsPanel readOnly onChanged={() => undefined} />}
           {tab === 'permissions' && <PermissionsPanel />}
           {tab === 'audit' && <AuditPanel key="audit" kind="activity" />}

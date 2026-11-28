@@ -50,3 +50,14 @@ export function authorizePermission(permission: PermissionKey): RequestHandler {
     next();
   };
 }
+
+/** Allows any one of the listed permissions, e.g. the refunds queue for finance and operations. */
+export function authorizeAnyPermission(...permissions: PermissionKey[]): RequestHandler {
+  return (request, _response, next) => {
+    if (!request.auth) return next(new AppError(401, 'AUTHENTICATION_REQUIRED', 'Please sign in to continue.'));
+    if (!permissions.some((permission) => hasPermission(request.auth!.roles, permission, request.auth!.extraPermissions))) {
+      return next(new AppError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action.'));
+    }
+    next();
+  };
+}

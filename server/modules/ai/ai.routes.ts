@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../shared/async-handler.js';
 import { MongoRateLimitStore } from '../../shared/rate-limit-store.js';
+import { PlannerRequestModel } from '../../models/planner-request.model.js';
 import { listPublishedListings } from '../listings/listing.service.js';
 import { generate } from './ai-client.js';
 
@@ -47,5 +48,11 @@ aiRouter.post('/chat', perVisitor, perDay, validate('body', chatSchema), asyncHa
     system: CHAT_RULES + await catalogueForChat(), temperature: 0.6,
     contents: request.body.messages.map((message: { role: string; text: string }) => ({ role: message.role === 'assistant' ? 'model' as const : 'user' as const, text: message.text })),
   });
+  // Saved for the Super Admin's AI planner page. Best effort: a failed save never breaks the guest's chat.
+  const firstQuestion = request.body.messages.find((message: { role: string }) => message.role === 'user')?.text ?? '';
+  PlannerRequestModel.create({
+    request: firstQuestion.slice(0, 1_000), reply: reply.slice(0, 500),
+    listings: [...reply.matchAll(/\[\[(lst_[0-9a-f-]+)\]\]/gi)].map((match) => match[1]),
+  }).catch(() => undefined);
   response.json({ reply });
 }));

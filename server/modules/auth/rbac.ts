@@ -19,6 +19,9 @@ export const permissionDescriptions = {
   'fraud:review': 'Review fraud risk cases.',
   'crm:read': 'Read customer records, value and loyalty.',
   'audit:read': 'Read security and operational audit records.',
+  'refund:manage': 'Manage the refunds queue: list refunds, retry and mark them sent.',
+  'platform:manage': 'Manage platform identity, language and currency settings.',
+  'planner:read': 'Read AI trip planner requests from guests.',
 } satisfies Record<string, string>;
 
 export type PermissionKey = keyof typeof permissionDescriptions;
@@ -33,9 +36,10 @@ export const rolePermissions: Record<UserRole, readonly PermissionKey[]> = {
   // Super Admin: everything.
   admin: permissionKeys,
   // Approves listings and partners, runs bookings, complaints and reviews. No money settings.
-  operations_manager: [...signedIn, 'vendor:manage', 'listing:moderate', 'booking:read', 'booking:manage', 'support:manage', 'audit:read'],
+  // Refunds queue only: payouts, commission and platform settings stay with finance/admin.
+  operations_manager: [...signedIn, 'vendor:manage', 'listing:moderate', 'booking:read', 'booking:manage', 'support:manage', 'audit:read', 'refund:manage'],
   // Refunds, payouts, commission, transactions and fraud. Reads bookings to check them, cannot change them.
-  finance_manager: [...signedIn, 'finance:manage', 'booking:read', 'fraud:review', 'audit:read'],
+  finance_manager: [...signedIn, 'finance:manage', 'booking:read', 'fraud:review', 'audit:read', 'refund:manage'],
   // Tickets, reported chats and customer records; reads bookings to answer guests.
   support_agent: [...signedIn, 'support:manage', 'booking:read', 'crm:read'],
   // The rest comes from the user's custom role.

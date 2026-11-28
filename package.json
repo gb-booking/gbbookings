@@ -15,6 +15,7 @@
     "start:production": "cross-env NODE_ENV=production node dist-server/server.cjs",
     "clean": "node -e \"for(const dir of ['dist','dist-server'])require('node:fs').rmSync(dir,{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
+    "seed:roles": "tsx server/scripts/seed-roles-console-data.ts",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {

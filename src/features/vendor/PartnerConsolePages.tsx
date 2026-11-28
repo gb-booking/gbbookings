@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { FileText } from 'lucide-react';
-import { api, type PaymentRequest } from '../../shared/api/api';
+import { Briefcase, FileText, ShieldCheck } from 'lucide-react';
+import { api, type PaymentRequest, type PayoutStatement, type VendorProfile } from '../../shared/api/api';
 import DateInput from '../../shared/components/DateInput';
 import Select from '../../shared/components/Select';
+import Statement, { netLabel } from '../../shared/components/Statement';
 import { toast } from '../../shared/components/Toaster';
 import { button, field, Loading, pkr, primary, RequestStatus, Table, useLoad } from '../admin/ConsolePages';
+import { formatDateForDisplay } from '../../shared/utils/date';
+import type { VendorTab } from './VendorWorkspace';
 
 const TYPES: Array<[PaymentRequest['type'], string]> = [
   ['remaining_balance', 'Remaining balance'], ['booking_advance', 'Booking advance'], ['partial_payment', 'Partial payment'],
@@ -73,5 +76,58 @@ export function PartnerDocuments() {
           <div className="p-2 text-xs text-slate-600"><p className="truncate font-semibold">{item.alt || item.mimeType}</p><p>{Math.round(item.bytes / 1024)} KB · {new Date(item.createdAt).toLocaleDateString('en-PK')}</p></div>
         </li>)}</ul>}
     </Loading>
+  </div>;
+}
+
+/** Payout statements only: the counterpart to Payments & earnings, which also shows the live balance and unsettled bookings. */
+export function VendorPayoutStatements() {
+  const [statement, setStatement] = useState<PayoutStatement | null>(null);
+  const [status, setStatus] = useState<'' | 'open' | 'settled'>('');
+  const [error, setError] = useState('');
+  const { value, error: loadError } = useLoad(() => api.getPartnerFinance(), []);
+  const open = (id: string) => api.getPartnerStatement(id).then(setStatement).catch((reason: Error) => setError(reason.message));
+  if (statement) return <Statement statement={statement} onClose={() => setStatement(null)} />;
+  const payouts = (value?.payouts ?? []).filter((item) => !status || item.status === status);
+  return <div className="space-y-4">
+    {(error || loadError) && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error || loadError}</p>}
+    <Select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value as any)} className={field}>
+      <option value="">All statements</option><option value="open">Not settled yet</option><option value="settled">Settled</option>
+    </Select>
+    <Loading error={loadError} ready={Boolean(value)}>
+      <Table head={['Statement', 'Issued', 'Bookings', 'Amount', 'Status', '']} empty="GBBookings has not issued a statement yet. Statements appear once your bookings settle."
+        rows={payouts.map((item) => [<span className="font-mono text-xs">{item.reference}</span>, formatDateForDisplay(item.createdAt), item.bookings, <strong>{netLabel(item.net)}</strong>,
+          item.status === 'settled' ? 'Settled' : 'Not settled yet',
+          <button type="button" className={button} onClick={() => void open(item.id)}>View</button>])} />
+    </Loading>
+    <p className="text-xs text-slate-500">A positive amount means GBBookings pays you; a negative amount means you pay GBBookings the commission on money you collected. Each statement doubles as the commission invoice.</p>
+  </div>;
+}
+
+/** Business details and account settings in one place, for hotel and homestay partners. */
+export function VendorSettingsPage({ vendor, onTab }: { vendor: VendorProfile; onTab: (tab: VendorTab) => void }) {
+  const address = [vendor.address?.line1, vendor.address?.city, vendor.address?.region].filter(Boolean).join(', ');
+  return <div className="space-y-5">
+    <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <h2 className="font-bold text-slate-900">Your business</h2>
+      <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+        {[['Business', vendor.name], ['Type', vendor.businessType.replace('_', ' ')], ['Email', vendor.email], ['Phone', vendor.phone || '—'],
+          ['Registration no.', vendor.registrationNumber ?? '—'], ['NTN', vendor.taxNumber ?? '—'], ['Address', address || '—'],
+          ['Status', vendor.status], ['Bank details', vendor.payoutProfile ? 'Saved' : 'Not added yet'],
+        ].map(([term, value]) => <div key={term}><dt className="text-slate-500">{term}</dt><dd className="font-semibold capitalize">{value}</dd></div>)}
+      </dl>
+      {vendor.pendingChanges && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Business changes are waiting for GBBookings approval.</p>}
+    </section>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <button type="button" onClick={() => onTab('business')} className="rounded-2xl border border-slate-200 bg-white p-6 text-left hover:border-[#006F3C]">
+        <Briefcase className="size-5 text-[#006F3C]" aria-hidden="true" />
+        <span className="mt-2 block font-bold">Business profile</span>
+        <span className="mt-1 block text-sm text-slate-600">Your verified business details. Changes are approved by GBBookings before they apply.</span>
+      </button>
+      <button type="button" onClick={() => onTab('security')} className="rounded-2xl border border-slate-200 bg-white p-6 text-left hover:border-[#006F3C]">
+        <ShieldCheck className="size-5 text-[#006F3C]" aria-hidden="true" />
+        <span className="mt-2 block font-bold">Account settings</span>
+        <span className="mt-1 block text-sm text-slate-600">Manage email verification, your password and active sessions.</span>
+      </button>
+    </div>
   </div>;
 }

@@ -62,6 +62,66 @@ export async function updatePlatformSettings(userId: string, input: PlatformSett
   return getPlatformSettings();
 }
 
+/** Platform identity and locale. Prices on the site are shown in the default currency. */
+export const DEFAULT_PLATFORM_PROFILE = {
+  websiteName: 'GBBookings',
+  supportEmail: '',
+  supportPhone: '',
+  defaultCurrency: 'PKR',
+  timezone: 'Asia/Karachi',
+  defaultLanguage: 'en',
+  languages: [
+    { code: 'en', name: 'English', enabled: true },
+    { code: 'ur', name: 'Urdu', enabled: true },
+  ],
+  supportedCurrencies: [
+    { code: 'PKR', name: 'Pakistani Rupee' },
+    { code: 'USD', name: 'US Dollar' },
+  ],
+};
+export type PlatformProfile = typeof DEFAULT_PLATFORM_PROFILE;
+
+const languageEntry = z.object({ code: z.string().trim().min(2).max(10), name: z.string().trim().min(2).max(60), enabled: z.boolean() }).strict();
+const currencyEntry = z.object({ code: z.string().trim().min(3).max(3), name: z.string().trim().min(2).max(60) }).strict();
+export const platformProfileSchema = z.object({
+  websiteName: z.string().trim().min(2).max(80),
+  supportEmail: z.string().trim().email().max(120).or(z.literal('')),
+  supportPhone: z.string().trim().max(30),
+  defaultCurrency: z.string().trim().min(3).max(3),
+  timezone: z.string().trim().min(3).max(60),
+  defaultLanguage: z.string().trim().min(2).max(10),
+  languages: z.array(languageEntry).min(1).max(10),
+  supportedCurrencies: z.array(currencyEntry).min(1).max(10),
+}).strict().refine((profile) => profile.languages.some((entry) => entry.code === profile.defaultLanguage),
+  { message: 'The default language must be one of the languages listed.', path: ['defaultLanguage'] })
+  .refine((profile) => profile.supportedCurrencies.some((entry) => entry.code === profile.defaultCurrency),
+    { message: 'The default currency must be one of the currencies listed.', path: ['defaultCurrency'] });
+
+export async function getPlatformProfile(): Promise<PlatformProfile> {
+  const saved = await PlatformSettingModel.findOne({ key: 'platform' }).lean() as any;
+  if (!saved) return DEFAULT_PLATFORM_PROFILE;
+  return {
+    websiteName: saved.websiteName ?? DEFAULT_PLATFORM_PROFILE.websiteName,
+    supportEmail: saved.supportEmail ?? '',
+    supportPhone: saved.supportPhone ?? '',
+    defaultCurrency: saved.defaultCurrency ?? DEFAULT_PLATFORM_PROFILE.defaultCurrency,
+    timezone: saved.timezone ?? DEFAULT_PLATFORM_PROFILE.timezone,
+    defaultLanguage: saved.defaultLanguage ?? DEFAULT_PLATFORM_PROFILE.defaultLanguage,
+    languages: (saved.languages?.length ? saved.languages : DEFAULT_PLATFORM_PROFILE.languages).map(({ code, name, enabled }: any) => ({ code, name, enabled: enabled ?? true })),
+    supportedCurrencies: (saved.supportedCurrencies?.length ? saved.supportedCurrencies : DEFAULT_PLATFORM_PROFILE.supportedCurrencies).map(({ code, name }: any) => ({ code, name })),
+  };
+}
+
+export async function updatePlatformProfile(userId: string, input: PlatformProfile, metadata: SessionMetadata) {
+  const before = await getPlatformProfile();
+  await PlatformSettingModel.updateOne({ key: 'platform' }, { $set: { ...input, updatedBy: userId } }, { upsert: true, runValidators: true });
+  await recordAuditEvent({
+    actorId: userId, actorType: 'user', action: 'platform.profile_updated', resourceType: 'platform_settings', resourceId: 'platform',
+    ...metadata, metadata: { before, after: input },
+  });
+  return getPlatformProfile();
+}
+
 /** Refund percent for a guest cancelling a paid booking `hoursSinceBooking` after making it. */
 export function guestRefundPercent(settings: Pick<PlatformSettings, 'refundTiers' | 'laterRefundPercent'>, hoursSinceBooking: number) {
   return settings.refundTiers.find((tier) => hoursSinceBooking <= tier.withinHours)?.refundPercent ?? settings.laterRefundPercent;

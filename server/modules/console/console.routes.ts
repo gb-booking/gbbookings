@@ -8,6 +8,7 @@ import { CustomRoleModel, FraudCaseModel, paymentRequestTypes, TaskModel } from 
 import { HotelRoomTypeModel } from '../../models/hotel-room-type.model.js';
 import { ListingModel } from '../../models/listing.model.js';
 import { MediaModel } from '../../models/media.model.js';
+import { PlannerRequestModel } from '../../models/planner-request.model.js';
 import { SessionModel } from '../../models/session.model.js';
 import { staffRoles, UserModel } from '../../models/user.model.js';
 import { VendorModel } from '../../models/vendor.model.js';
@@ -256,6 +257,17 @@ consoleRouter.post('/ai/vendor', authorizePermission('vendor:manage'), aiLimit, 
   response.json({ data: await vendorInsight(auth(request).userId, request.body.vendorId) });
 }));
 
+/* AI trip planner: what guests asked the planner, newest first. Super Admin only. */
+consoleRouter.get('/ai/planner', authorizePermission('planner:read'), validate('query', z.object({ ...page }).strict()), asyncHandler(async (request, response) => {
+  await requireDatabase();
+  const { page: pageNumber, limit } = request.query as any;
+  const [items, total] = await Promise.all([
+    PlannerRequestModel.find().sort({ createdAt: -1 }).skip((pageNumber - 1) * limit).limit(limit).lean() as Promise<any[]>,
+    PlannerRequestModel.countDocuments(),
+  ]);
+  response.json({ data: items.map((item) => ({ id: item.publicId, request: item.request, reply: item.reply, listings: item.listings, createdAt: item.createdAt })), pagination: pagination(pageNumber, limit, total) });
+}));
+
 /* ───────────── Shared by partners and staff: listing AI and the assistant ───────────── */
 export const aiToolsRouter = Router();
 aiToolsRouter.use(authenticate, aiLimit);
@@ -314,3 +326,20 @@ guestConsoleRouter.get('/payments', asyncHandler(async (request, response) => {
   } });
 }));
 guestConsoleRouter.get('/loyalty', asyncHandler(async (request, response) => { response.json({ data: await myLoyalty(auth(request).userId) }); }));
+
+/** The guest's own display choices (Settings in My account). */
+const preferencesBody = z.object({
+  language: z.enum(['en', 'ur']),
+  currency: z.enum(['PKR', 'USD']),
+  emailNotifications: z.boolean(),
+}).strict();
+guestConsoleRouter.get('/preferences', asyncHandler(async (request, response) => {
+  await requireDatabase();
+  const user = await UserModel.findById(auth(request).userId).select('preferences').lean() as any;
+  response.json({ data: user?.preferences ?? { language: 'en', currency: 'PKR', emailNotifications: true } });
+}));
+guestConsoleRouter.patch('/preferences', validate('body', preferencesBody), asyncHandler(async (request, response) => {
+  await requireDatabase();
+  const updated = await UserModel.findByIdAndUpdate(auth(request).userId, { $set: { preferences: request.body } }, { new: true }).select('preferences').lean() as any;
+  response.json({ data: updated?.preferences ?? request.body });
+}));

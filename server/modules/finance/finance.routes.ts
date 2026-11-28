@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { connectDatabase } from '../../database/connection.js';
-import { authenticate, authorizePermission } from '../../middleware/authenticate.js';
+import { authenticate, authorizeAnyPermission, authorizePermission } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
 import { ServiceUnavailableError } from '../../shared/app-error.js';
 import { asyncHandler } from '../../shared/async-handler.js';
@@ -19,19 +19,22 @@ const refundParams = z.object({ bookingId: z.string().regex(/^bkg_[0-9a-f-]{36}$
 const payoutParams = z.object({ id: z.string().regex(/^pyt_[0-9a-f-]{36}$/i, 'Invalid statement.') }).strict();
 
 export const adminFinanceRouter = Router();
-adminFinanceRouter.use(authenticate, authorizePermission('finance:manage'), requireDatabase);
+// Refunds are shared with Operations; payouts, balances and reconciliation stay with finance/admin.
+adminFinanceRouter.use(authenticate, requireDatabase);
 
-adminFinanceRouter.get('/refunds', validate('query', z.object({ filter: z.enum(['open', 'sent']).default('open') }).strict()), asyncHandler(async (request, response) => {
+adminFinanceRouter.get('/refunds', authorizeAnyPermission('finance:manage', 'refund:manage'), validate('query', z.object({ filter: z.enum(['open', 'sent']).default('open') }).strict()), asyncHandler(async (request, response) => {
   response.json({ data: await listRefunds((request.query as any).filter ?? 'open'), autoRefunds: autoRefundsEnabled() });
 }));
 
-adminFinanceRouter.post('/refunds/:bookingId/:refundId/retry', validate('params', refundParams), asyncHandler(async (request, response) => {
+adminFinanceRouter.post('/refunds/:bookingId/:refundId/retry', authorizeAnyPermission('finance:manage', 'refund:manage'), validate('params', refundParams), asyncHandler(async (request, response) => {
   response.json({ data: await retryRefund(request.auth!.userId, request.params.bookingId, request.params.refundId) });
 }));
 
-adminFinanceRouter.post('/refunds/:bookingId/:refundId/mark-sent', validate('params', refundParams), validate('body', z.object({ note: z.string().trim().min(3).max(500) }).strict()), asyncHandler(async (request, response) => {
+adminFinanceRouter.post('/refunds/:bookingId/:refundId/mark-sent', authorizeAnyPermission('finance:manage', 'refund:manage'), validate('params', refundParams), validate('body', z.object({ note: z.string().trim().min(3).max(500) }).strict()), asyncHandler(async (request, response) => {
   response.json({ data: await markRefundSent(request.auth!.userId, request.params.bookingId, request.params.refundId, request.body.note, sessionMetadata(request)) });
 }));
+
+adminFinanceRouter.use(authorizePermission('finance:manage'));
 
 adminFinanceRouter.get('/balances', asyncHandler(async (_request, response) => {
   response.json({ data: await listBalances() });

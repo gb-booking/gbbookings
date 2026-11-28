@@ -30,6 +30,8 @@ const BecomePartner = lazy(() => import('../features/partner/BecomePartner'));
 const PartnerGate = lazy(() => import('../features/partner/PartnerGate'));
 const AdminDashboard = lazy(() => import('../features/admin/AdminDashboard'));
 const GuestPayments = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestPayments })));
+const GuestPaymentPortal = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestPaymentPortal })));
+const GuestSettings = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestSettings })));
 const GuestLoyalty = lazy(() => import('../features/account/GuestMoneyPages').then((module) => ({ default: module.GuestLoyalty })));
 const AiPlanner = lazy(() => import('../features/planner/AiPlanner'));
 const LegalPage = lazy(() => import('../features/support/LegalPage'));
@@ -45,7 +47,7 @@ const MobileInstallPrompt = lazy(() => import('../shared/components/MobileInstal
 const CookieNotice = lazy(() => import('../shared/components/CookieNotice'));
 
 // Views that need a signed-in user. Every navigation path (navbar, dashboards, deep flows) is gated at render time.
-const PROTECTED_VIEWS = new Set(['bookings', 'payments', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'admin-dashboard', 'checkout']);
+const PROTECTED_VIEWS = new Set(['bookings', 'payments', 'payment-portal', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'admin-dashboard', 'checkout', 'overview', 'settings', 'ai-assistant']);
 const STAFF_ROLES = ['admin', 'operations_manager', 'finance_manager', 'support_agent', 'custom_staff'];
 // Granted only when an admin approves the business; applicants are customers until then.
 const VENDOR_ROLES = ['vendor_owner', 'vendor_staff'];
@@ -58,7 +60,7 @@ const homeDashboard = (roles: string[]) =>
 
 // URL <-> view sync so refresh, deep links and the browser Back button work.
 // ponytail: hand-rolled History API routing; move to a router library if routes need more params than a listing id.
-const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'agencies', 'offers', 'bookings', 'payments', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
+const PATH_VIEWS = new Set(['homestays', 'hotels', 'cars', 'tours', 'destinations', 'agencies', 'offers', 'bookings', 'payments', 'payment-portal', 'loyalty', 'profile', 'saved', 'inbox', 'vendor-dashboard', 'become-partner', 'admin-dashboard', 'ai-planner', 'ai-assistant', 'overview', 'settings', 'support', 'terms', 'privacy', 'refunds', 'service', 'partner-agreement', 'about']);
 const SEARCH_TYPES = ['hotel', 'car', 'tour', 'homestay', 'destination', 'offer'] as const;
 type SearchType = typeof SEARCH_TYPES[number];
 
@@ -611,10 +613,10 @@ export default function App() {
 
         {view === 'inbox' && accountFrame(<Inbox key={`${userId}-${inboxStart?.listingId ?? ''}`} start={inboxStart} />)}
 
-        {(view === 'bookings' || view === 'profile' || view === 'saved') && accountFrame(
+        {(view === 'bookings' || view === 'overview' || view === 'profile' || view === 'saved') && accountFrame(
           <UserDashboard key={`${userId}-${view}`}
             onMessage={(booking) => openInbox({ listingId: booking.listingId, title: booking.listingTitle, image: booking.listingImage })}
-            section={view}
+            section={view === 'overview' ? 'bookings' : view}
             paymentReturn={initialLocation.payment}
             userEmail={userEmail}
             userName={userName}
@@ -653,8 +655,11 @@ export default function App() {
         )}
 
         {view === 'ai-planner' && <AiPlanner onSelectListing={handleSelectListing} />}
+        {view === 'ai-assistant' && accountFrame(<AiPlanner onSelectListing={handleSelectListing} />)}
         {view === 'support' && accountFrame(<SupportCentre />)}
         {view === 'payments' && accountFrame(<GuestPayments />)}
+        {view === 'payment-portal' && accountFrame(<GuestPaymentPortal onNavigate={handleNavigation} />)}
+        {view === 'settings' && accountFrame(<GuestSettings />)}
         {view === 'loyalty' && accountFrame(<GuestLoyalty />)}
 
         {view === 'become-partner' && (!authChecked

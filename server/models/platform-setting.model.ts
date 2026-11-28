@@ -23,6 +23,15 @@ const platformSettingSchema = new Schema({
   laterRefundPercent: { type: Number, required: true, min: 0, max: 100 },
   // Taxes added to every booking, shown as their own lines. Partners keep and remit them; no commission applies.
   taxes: { type: [new Schema({ name: { type: String, trim: true, maxlength: 60 }, percent: { type: Number, min: 0, max: 50 } }, { _id: false })], default: [] },
+  // Platform identity and locale, edited on the Super Admin's Platform settings and Language & currency pages.
+  websiteName: { type: String, trim: true, maxlength: 80 },
+  supportEmail: { type: String, trim: true, lowercase: true, maxlength: 120 },
+  supportPhone: { type: String, trim: true, maxlength: 30 },
+  defaultCurrency: { type: String, trim: true, uppercase: true, maxlength: 3 },
+  timezone: { type: String, trim: true, maxlength: 60 },
+  defaultLanguage: { type: String, trim: true, maxlength: 10 },
+  languages: { type: [new Schema({ code: { type: String, trim: true, maxlength: 10 }, name: { type: String, trim: true, maxlength: 60 }, enabled: { type: Boolean, default: true } }, { _id: false })], default: [] },
+  supportedCurrencies: { type: [new Schema({ code: { type: String, trim: true, uppercase: true, maxlength: 3 }, name: { type: String, trim: true, maxlength: 60 } }, { _id: false })], default: [] },
   updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

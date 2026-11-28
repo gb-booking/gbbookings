@@ -369,6 +369,21 @@ export interface PlatformSettings {
   laterRefundPercent: number;
   taxes: Array<{ name: string; percent: number }>;
 }
+/** Platform identity, language and currency (Super Admin's Platform settings page). */
+export interface PlatformProfile {
+  websiteName: string;
+  supportEmail: string;
+  supportPhone: string;
+  defaultCurrency: string;
+  timezone: string;
+  defaultLanguage: string;
+  languages: Array<{ code: string; name: string; enabled: boolean }>;
+  supportedCurrencies: Array<{ code: string; name: string }>;
+}
+/** One guest trip-planner chat, as the Super Admin sees it. */
+export interface PlannerRequest { id: string; request: string; reply?: string; listings: string[]; createdAt: string }
+/** A guest's own display choices (Settings in My account). */
+export interface GuestPreferences { language: 'en' | 'ur'; currency: 'PKR' | 'USD'; emailNotifications: boolean }
 
 /** A guest↔partner thread about one listing. `side` is which side the viewer is on. */
 export interface Conversation {
@@ -1230,6 +1245,12 @@ export const api = {
     saveSettings(settings: PlatformSettings) {
       return request<{ data: PlatformSettings }>('/api/v1/admin/settings', { method: 'PUT', body: JSON.stringify(settings) }).then((result) => result.data);
     },
+    getPlatformProfile() {
+      return request<{ data: PlatformProfile }>('/api/v1/admin/platform').then((result) => result.data);
+    },
+    savePlatformProfile(profile: PlatformProfile) {
+      return request<{ data: PlatformProfile }>('/api/v1/admin/platform', { method: 'PUT', body: JSON.stringify(profile) }).then((result) => result.data);
+    },
   },
 
   /** Staff console pages beyond the admin core. The server checks each call's permission. */
@@ -1260,6 +1281,7 @@ export const api = {
     forecast: () => data<{ basis: string; weeks: Array<{ weekOf: string; bookedCount: number; bookedValue: number; bookedCommission: number; projectedCount: number; projectedValue: number; projectedCommission: number }> }>('/api/v1/console/ai/forecast'),
     aiSupportReply: (caseId: string) => data<{ reply: string }>('/api/v1/console/ai/support', { method: 'POST', body: JSON.stringify({ caseId }) }),
     aiVendor: (vendorId: string) => data<{ summary: string; risks: string[]; actions: string[] }>('/api/v1/console/ai/vendor', { method: 'POST', body: JSON.stringify({ vendorId }) }),
+    plannerRequests: (page = 1) => request<Paginated<PlannerRequest>>(`/api/v1/console/ai/planner${queryString({ page })}`),
   },
 
   /** AI suggestions for partners and listing staff. Nothing is applied automatically. */
@@ -1281,6 +1303,8 @@ export const api = {
   guestConsole: {
     payments: () => data<GuestPayments>('/api/v1/me/payments'),
     loyalty: () => data<{ points: number; tier: string; trips: number; lifetimeValue: number; referralCode: string; nextTier?: string; toNextTier?: number }>('/api/v1/me/loyalty'),
+    preferences: () => data<GuestPreferences>('/api/v1/me/preferences'),
+    savePreferences: (input: GuestPreferences) => data<GuestPreferences>('/api/v1/me/preferences', { method: 'PATCH', body: JSON.stringify(input) }),
   },
 
   getWishlist() {

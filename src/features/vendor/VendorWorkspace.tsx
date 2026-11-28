@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowLeft, Banknote, BarChart3, Bot, Briefcase, Building2, CalendarCheck, CalendarDays, Car, FileText, House, LayoutDashboard, LogOut, MessageSquare, Mountain, PanelLeftClose, PanelLeftOpen, Plus, Receipt, RefreshCw, ShieldCheck, Sparkles, Star, Tags, TicketPercent, Users } from 'lucide-react';
+import { ArrowLeft, Banknote, BarChart3, Bot, Briefcase, Building2, CalendarCheck, CalendarDays, Car, FileText, House, LayoutDashboard, LogOut, MessageSquare, Mountain, PanelLeftClose, PanelLeftOpen, Plus, Receipt, RefreshCw, Settings, ShieldCheck, Sparkles, Star, Tags, TicketPercent, Users } from 'lucide-react';
 
-export type VendorTab = 'overview' | 'properties' | 'new-property' | 'reservations' | 'messages' | 'reviews' | 'promo-codes' | 'reports' | 'payouts' | 'team' | 'business' | 'security'
+export type VendorTab = 'overview' | 'properties' | 'new-property' | 'reservations' | 'messages' | 'reviews' | 'promo-codes' | 'reports' | 'payouts' | 'payout-statements' | 'settings' | 'team' | 'business' | 'security'
   | 'availability' | 'rooms-pricing' | 'channel-manager' | 'payment-requests' | 'ai-pricing' | 'ai-content' | 'ai-assistant' | 'documents';
 export type PartnerKind = 'hotel' | 'homestay' | 'car' | 'tour';
 
 /** Areas the server grants this team member (GET /vendors/me → membership.access). */
 export type MemberArea = 'listings' | 'reservations' | 'reports' | 'team' | 'business';
 const TAB_AREA: Partial<Record<VendorTab, MemberArea>> = {
-  overview: 'listings', properties: 'listings', 'new-property': 'listings', reservations: 'reservations', messages: 'reservations', reviews: 'listings', 'promo-codes': 'listings', reports: 'reports', payouts: 'reports', team: 'team', business: 'business',
+  overview: 'listings', properties: 'listings', 'new-property': 'listings', reservations: 'reservations', messages: 'reservations', reviews: 'listings', 'promo-codes': 'listings', reports: 'reports', payouts: 'reports', 'payout-statements': 'reports', settings: 'business', team: 'team', business: 'business',
   availability: 'listings', 'rooms-pricing': 'listings', 'channel-manager': 'listings', 'payment-requests': 'reports', 'ai-pricing': 'listings', 'ai-content': 'listings', 'ai-assistant': 'listings', documents: 'listings',
 };
 // Before the account loads, show the owner's layout; security is open to everyone.
@@ -26,7 +26,7 @@ export const partnerWords = (kind: PartnerKind) => ({
 const navGroups = (kind: PartnerKind): Array<{ title?: string; items: Array<{ id: VendorTab; label: string; icon: typeof Star }> }> => {
   const words = partnerWords(kind);
   const stay = kind === 'hotel' || kind === 'homestay';
-  return [
+  const groups: Array<{ title?: string; items: Array<{ id: VendorTab; label: string; icon: typeof Star }> }> = [
     { items: [
       { id: 'overview', label: 'Overview', icon: LayoutDashboard },
       { id: 'reservations', label: words.bookings, icon: CalendarCheck },
@@ -48,13 +48,21 @@ const navGroups = (kind: PartnerKind): Array<{ title?: string; items: Array<{ id
     ] },
     { title: 'Business', items: [
       { id: 'payouts', label: 'Payments & earnings', icon: Banknote },
+      { id: 'payout-statements', label: 'Payouts', icon: Banknote },
       { id: 'payment-requests', label: 'Payment requests', icon: Receipt },
       { id: 'team', label: 'Staff', icon: Users },
       { id: 'documents', label: 'Documents', icon: FileText },
       { id: 'business', label: 'Business profile', icon: Briefcase },
+      ...(stay ? [{ id: 'settings' as const, label: 'Settings', icon: Settings }] : []),
       { id: 'security', label: 'Account settings', icon: ShieldCheck },
     ] },
   ];
+  // A vehicle provider gets the smallest vendor menu: no staff, reviews, payment requests or channel manager.
+  if (kind === 'car') {
+    const hidden: VendorTab[] = ['reviews', 'payment-requests', 'team', 'channel-manager'];
+    return groups.map((group) => ({ ...group, items: group.items.filter((item) => !hidden.includes(item.id)) })).filter((group) => group.items.length > 0);
+  }
+  return groups;
 };
 
 const titles = (kind: PartnerKind): Record<VendorTab, [string, string]> => {
@@ -68,6 +76,8 @@ const titles = (kind: PartnerKind): Record<VendorTab, [string, string]> => {
     reviews: ['Guest reviews', 'Read what guests say, reply publicly, or report a review that breaks the rules.'],
     'promo-codes': ['Promo codes', `Give guests a discount code. Guests enter it at checkout and pay the reduced total at ${kind === 'car' ? 'pickup' : kind === 'tour' ? 'the start of the tour' : 'your property'}.`],
     payouts: ['Payments & earnings', 'What GBBookings owes you and what you owe it, booking by booking. Each statement doubles as the commission invoice.'],
+    'payout-statements': ['Payouts', 'Every statement GBBookings issued you, and whether it is settled.'],
+    settings: ['Settings', 'Your business details and account settings in one place.'],
     reports: ['Reports', `Occupancy and money per ${one} for any dates.`],
     team: ['Staff', 'Give managers and reception staff their own sign-in.'],
     business: ['Business profile', 'Your verified business details. Changes are approved by GBBookings before they apply.'],

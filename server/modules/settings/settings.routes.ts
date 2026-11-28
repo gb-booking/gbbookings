@@ -3,7 +3,7 @@ import { authenticate, authorizePermission } from '../../middleware/authenticate
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../shared/async-handler.js';
 import { sessionMetadata } from '../auth/auth.service.js';
-import { getPlatformSettings, platformSettingsSchema, requireSettingsDatabase, updatePlatformSettings } from './settings.service.js';
+import { getPlatformProfile, getPlatformSettings, platformProfileSchema, platformSettingsSchema, requireSettingsDatabase, updatePlatformProfile, updatePlatformSettings } from './settings.service.js';
 
 export const adminSettingsRouter = Router();
 
@@ -17,6 +17,21 @@ adminSettingsRouter.get('/', asyncHandler(async (_request, response) => {
 adminSettingsRouter.put('/', validate('body', platformSettingsSchema), asyncHandler(async (request, response) => {
   await requireSettingsDatabase();
   response.json({ data: await updatePlatformSettings(request.auth!.userId, request.body, sessionMetadata(request)) });
+}));
+
+/** Platform identity, language and currency. Super Admin only (platform:manage). */
+export const adminPlatformRouter = Router();
+
+adminPlatformRouter.use(authenticate, authorizePermission('platform:manage'));
+
+adminPlatformRouter.get('/', asyncHandler(async (_request, response) => {
+  await requireSettingsDatabase();
+  response.json({ data: await getPlatformProfile() });
+}));
+
+adminPlatformRouter.put('/', validate('body', platformProfileSchema), asyncHandler(async (request, response) => {
+  await requireSettingsDatabase();
+  response.json({ data: await updatePlatformProfile(request.auth!.userId, request.body, sessionMetadata(request)) });
 }));
 
 /** The guest refund rules, public so the Refund Policy page always shows what the admin set. */

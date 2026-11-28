@@ -5,7 +5,7 @@ import AddHotelWizard from './AddHotelWizard';
 import AddCarWizard from './AddCarWizard';
 import AddTourWizard from './AddTourWizard';
 import HotelWorkspace, { LISTING_STATUS, type HotelTab } from './HotelWorkspace';
-import { PartnerDocuments, PartnerPaymentRequests } from './PartnerConsolePages';
+import { PartnerDocuments, PartnerPaymentRequests, VendorPayoutStatements, VendorSettingsPage } from './PartnerConsolePages';
 import { AiSuggestionTools, AssistantChat } from './AiTools';
 import VendorReservations from './VendorReservations';
 import SecurityPanel from '../account/SecurityPanel';
@@ -136,6 +136,8 @@ export default function VendorDashboard({ setView, userName, userEmail, onSignOu
         {tab === 'promo-codes' && canOpen(access, 'promo-codes') && <PartnerCoupons />}
         {tab === 'reports' && canOpen(access, 'reports') && <VendorReports />}
         {tab === 'payouts' && canOpen(access, 'payouts') && <PartnerPayouts onBankDetails={canOpen(access, 'business') ? () => navigate('business') : undefined} />}
+        {tab === 'payout-statements' && canOpen(access, 'payout-statements') && <VendorPayoutStatements />}
+        {tab === 'settings' && vendor && canOpen(access, 'settings') && <VendorSettingsPage vendor={vendor} onTab={navigate} />}
         {tab === 'team' && canOpen(access, 'team') && <HotelTeam />}
         {tab === 'payment-requests' && canOpen(access, 'payment-requests') && <PartnerPaymentRequests />}
         {tab === 'documents' && canOpen(access, 'documents') && <PartnerDocuments />}

@@ -40,6 +40,12 @@ const userSchema = new Schema({
   customRoleId: { type: Schema.Types.ObjectId, ref: 'CustomRole' },
   // Saved listing public IDs, newest last.
   wishlist: { type: [String], default: [], select: false },
+  // Guest's own display choices, edited on the Settings page in My account.
+  preferences: {
+    language: { type: String, enum: ['en', 'ur'], default: 'en' },
+    currency: { type: String, enum: ['PKR', 'USD'], default: 'PKR' },
+    emailNotifications: { type: Boolean, default: true },
+  },
   status: {
     type: String,
     enum: ['active', 'suspended', 'archived'],

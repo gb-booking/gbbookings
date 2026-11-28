@@ -17,9 +17,10 @@ const label = (value: string) => value.replace(/_/g, ' ');
 
 /** Every booking on the platform: search, filter, export, and the no-show disputes guests have raised. */
 /** `readOnly`: finance and support staff see bookings but cannot decide disputes. */
-export default function BookingsPanel({ onChanged, readOnly = false }: { onChanged: () => void; readOnly?: boolean }) {
+/** `initialView`: the Disputes menu item opens straight on the disputes list. */
+export default function BookingsPanel({ onChanged, readOnly = false, initialView = 'all' }: { onChanged: () => void; readOnly?: boolean; initialView?: 'all' | 'disputes' }) {
   const { askReason, dialog } = useReasonDialog();
-  const [view, setView] = useState<'all' | 'disputes'>('all');
+  const [view, setView] = useState<'all' | 'disputes'>(initialView);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Omit<AdminBookingFilters, 'q' | 'dispute'>>({ status: '', paymentStatus: '', type: '', from: '', to: '' });
   const [page, setPage] = useState(1);

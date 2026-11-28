@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Download, LoaderCircle, RefreshCw } from 'lucide-react';
-import { api, type CustomRole, type FraudCase, type PaymentRequest, type PlatformReport } from '../../shared/api/api';
+import { api, type CustomRole, type FraudCase, type Paginated, type PaymentRequest, type PlatformProfile, type PlatformReport, type PlannerRequest } from '../../shared/api/api';
 import DateInput from '../../shared/components/DateInput';
 import Select from '../../shared/components/Select';
 import { toast } from '../../shared/components/Toaster';
@@ -320,6 +320,164 @@ export function CustomRolesPage() {
           <button type="button" className={button} onClick={() => setEditing(role)}>Edit</button>])} />
     </Loading>
     <p className="text-xs text-slate-500">Give someone a custom role from Staff: invite them and pick the role.</p>
+  </div>;
+}
+
+/* ───────── AI planner (admin) ───────── */
+/** What guests asked the trip planner, newest first. Chats are anonymous; only the question and the listings it recommended are kept. */
+export function AiPlannerAdminPage() {
+  const [page, setPage] = useState(1);
+  const { value, error, reload } = useLoad<Paginated<PlannerRequest>>(() => api.console.plannerRequests(page), [page]);
+  return <div className="space-y-4">
+    <p className="text-sm text-slate-600">Every planner chat is saved here so you can see what guests ask for and which places the planner recommends. Nothing personal is stored: the chat needs no sign-in. Try it yourself on the <a href="/ai-planner" className="font-semibold text-[#006F3C] underline">trip planner</a>.</p>
+    <Loading error={error} ready={Boolean(value)}>
+      <Table head={['When', 'Guest asked', 'Planner recommended', 'Reply (excerpt)']} empty="No planner chats yet. Once a guest uses the trip planner, their question appears here."
+        rows={(value?.data ?? []).map((item) => [when(item.createdAt), <span className="font-semibold">{item.request}</span>,
+          item.listings.length ? item.listings.map((id) => <span key={id} className="mr-1 font-mono text-xs">{id}</span>) : <span className="text-slate-500">No listing</span>,
+          <span className="text-slate-600">{item.reply ?? '—'}</span>])} />
+      {value && value.pagination.pages > 1 && <div className="flex justify-end gap-2"><button type="button" className={button} disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span className="self-center text-sm text-slate-600">Page {page} of {value.pagination.pages}</span><button type="button" className={button} disabled={page >= value.pagination.pages} onClick={() => setPage(page + 1)}>Next</button></div>}
+    </Loading>
+    <button type="button" className={button} onClick={reload}><RefreshCw className="size-4" />Refresh</button>
+  </div>;
+}
+
+/* ───────── Platform settings + Language & currency ───────── */
+function usePlatformProfile() {
+  const { value, error, reload } = useLoad<PlatformProfile>(() => api.admin.getPlatformProfile());
+  const [draft, setDraft] = useState<PlatformProfile | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  useEffect(() => { if (value) setDraft(value); }, [value]);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!draft) return;
+    setBusy(true); setSaveError('');
+    try { await api.admin.savePlatformProfile(draft); setEditing(false); reload(); toast('Saved.'); }
+    catch (reason) { setSaveError(reason instanceof Error ? reason.message : 'Could not save.'); }
+    finally { setBusy(false); }
+  };
+  return { profile: draft, error: error || saveError, editing, setEditing, setDraft, save, busy, ready: Boolean(draft), reload };
+}
+
+const TIMEZONES = ['Asia/Karachi', 'Asia/Dubai', 'Asia/Kolkata', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'UTC'];
+
+/** Website name, support contacts, default currency and time zone. */
+export function PlatformSettingsPage() {
+  const { profile, error, editing, setEditing, setDraft, save, busy, ready } = usePlatformProfile();
+  return <Loading error={error} ready={ready}>{profile && <form onSubmit={save} className={`${card} space-y-5`}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-slate-600">{editing ? 'Editing. Nothing changes until you save.' : 'The identity guests see. The default currency is what prices are shown in.'}</p>
+      {editing
+        ? <div className="flex gap-2"><button type="button" className={button} disabled={busy} onClick={() => { setEditing(false); }}>Cancel</button><button className={primary} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+        : <button type="button" className={button} onClick={() => setEditing(true)}>Edit</button>}
+    </div>
+    <fieldset disabled={!editing} className="grid gap-4 sm:grid-cols-2 disabled:[&_input]:bg-slate-50 disabled:[&_input]:text-slate-600 disabled:[&_select]:bg-slate-50">
+      <label className="text-xs font-semibold">Website name<input required minLength={2} maxLength={80} value={profile.websiteName} onChange={(event) => setDraft({ ...profile, websiteName: event.target.value })} className={`${field} mt-1 w-full`} /></label>
+      <label className="text-xs font-semibold">Support email<input type="email" maxLength={120} value={profile.supportEmail} onChange={(event) => setDraft({ ...profile, supportEmail: event.target.value })} className={`${field} mt-1 w-full`} placeholder="support@gbbookings.com" /></label>
+      <label className="text-xs font-semibold">Support phone<input maxLength={30} value={profile.supportPhone} onChange={(event) => setDraft({ ...profile, supportPhone: event.target.value })} className={`${field} mt-1 w-full`} placeholder="+92 300 0000000" /></label>
+      <label className="text-xs font-semibold">Default currency<Select value={profile.defaultCurrency} onChange={(event) => setDraft({ ...profile, defaultCurrency: event.target.value })} className={`${field} mt-1 w-full`}>
+        {profile.supportedCurrencies.map((entry) => <option key={entry.code} value={entry.code}>{entry.code} · {entry.name}</option>)}
+      </Select></label>
+      <label className="text-xs font-semibold">Time zone<Select value={profile.timezone} onChange={(event) => setDraft({ ...profile, timezone: event.target.value })} className={`${field} mt-1 w-full`}>
+        {TIMEZONES.includes(profile.timezone) ? null : <option value={profile.timezone}>{profile.timezone}</option>}
+        {TIMEZONES.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+      </Select></label>
+    </fieldset>
+    <p className="text-xs text-slate-500">Currencies and languages themselves are managed on the Language &amp; currency page.</p>
+  </form>}</Loading>;
+}
+
+/** Which languages guests can use, and which currencies prices are shown in. */
+export function LanguageCurrencyPage() {
+  const { profile, error, editing, setEditing, setDraft, save, busy, ready } = usePlatformProfile();
+  const [newLanguage, setNewLanguage] = useState({ code: '', name: '' });
+  const [newCurrency, setNewCurrency] = useState({ code: '', name: '' });
+  return <Loading error={error} ready={ready}>{profile && <form onSubmit={save} className={`${card} space-y-6`}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-slate-600">{editing ? 'Editing. Nothing changes until you save.' : 'The default language and currency must be in the lists below.'}</p>
+      {editing
+        ? <div className="flex gap-2"><button type="button" className={button} disabled={busy} onClick={() => { setEditing(false); }}>Cancel</button><button className={primary} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+        : <button type="button" className={button} onClick={() => setEditing(true)}>Edit</button>}
+    </div>
+    <fieldset disabled={!editing} className="space-y-6 disabled:[&_input]:bg-slate-50 disabled:[&_input]:text-slate-600 disabled:[&_select]:bg-slate-50">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-xs font-semibold">Default language<Select value={profile.defaultLanguage} onChange={(event) => setDraft({ ...profile, defaultLanguage: event.target.value })} className={`${field} mt-1 w-full`}>
+          {profile.languages.map((entry) => <option key={entry.code} value={entry.code}>{entry.name} ({entry.code})</option>)}
+        </Select></label>
+        <label className="text-xs font-semibold">Default currency<Select value={profile.defaultCurrency} onChange={(event) => setDraft({ ...profile, defaultCurrency: event.target.value })} className={`${field} mt-1 w-full`}>
+          {profile.supportedCurrencies.map((entry) => <option key={entry.code} value={entry.code}>{entry.code} · {entry.name}</option>)}
+        </Select></label>
+      </div>
+      <div>
+        <h2 className="mb-2 font-bold">Languages</h2>
+        <ul className="space-y-2">{profile.languages.map((entry, index) => <li key={entry.code} className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="w-48 font-semibold">{entry.name} <span className="font-mono text-xs text-slate-500">{entry.code}</span></span>
+          <label className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-[#006F3C]" checked={entry.enabled} onChange={(event) => setDraft({ ...profile, languages: profile.languages.map((item, at) => at === index ? { ...item, enabled: event.target.checked } : item) })} />Enabled</label>
+          {profile.languages.length > 1 && profile.defaultLanguage !== entry.code && <button type="button" className={button} onClick={() => setDraft({ ...profile, languages: profile.languages.filter((_, at) => at !== index) })}>Remove</button>}
+        </li>)}</ul>
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="text-xs font-semibold">Code<input value={newLanguage.code} onChange={(event) => setNewLanguage({ ...newLanguage, code: event.target.value })} placeholder="ur" className={`${field} mt-1 w-20`} /></label>
+          <label className="text-xs font-semibold">Name<input value={newLanguage.name} onChange={(event) => setNewLanguage({ ...newLanguage, name: event.target.value })} placeholder="Urdu" className={`${field} mt-1 w-40`} /></label>
+          <button type="button" className={button} disabled={!newLanguage.code.trim() || !newLanguage.name.trim() || profile.languages.some((entry) => entry.code === newLanguage.code.trim())}
+            onClick={() => { setDraft({ ...profile, languages: [...profile.languages, { code: newLanguage.code.trim(), name: newLanguage.name.trim(), enabled: true }] }); setNewLanguage({ code: '', name: '' }); }}>Add language</button>
+        </div>
+      </div>
+      <div>
+        <h2 className="mb-2 font-bold">Currencies</h2>
+        <ul className="space-y-2">{profile.supportedCurrencies.map((entry, index) => <li key={entry.code} className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="w-48 font-semibold">{entry.code} <span className="font-normal text-slate-500">· {entry.name}</span></span>
+          {profile.supportedCurrencies.length > 1 && profile.defaultCurrency !== entry.code && <button type="button" className={button} onClick={() => setDraft({ ...profile, supportedCurrencies: profile.supportedCurrencies.filter((_, at) => at !== index) })}>Remove</button>}
+        </li>)}</ul>
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="text-xs font-semibold">Code<input value={newCurrency.code} onChange={(event) => setNewCurrency({ ...newCurrency, code: event.target.value.toUpperCase() })} placeholder="USD" maxLength={3} className={`${field} mt-1 w-20`} /></label>
+          <label className="text-xs font-semibold">Name<input value={newCurrency.name} onChange={(event) => setNewCurrency({ ...newCurrency, name: event.target.value })} placeholder="US Dollar" className={`${field} mt-1 w-40`} /></label>
+          <button type="button" className={button} disabled={newCurrency.code.trim().length !== 3 || !newCurrency.name.trim() || profile.supportedCurrencies.some((entry) => entry.code === newCurrency.code.trim().toUpperCase())}
+            onClick={() => { setDraft({ ...profile, supportedCurrencies: [...profile.supportedCurrencies, { code: newCurrency.code.trim().toUpperCase(), name: newCurrency.name.trim() }] }); setNewCurrency({ code: '', name: '' }); }}>Add currency</button>
+        </div>
+      </div>
+    </fieldset>
+  </form>}</Loading>;
+}
+
+/* ───────── Support overview ───────── */
+/** The Support Agent's home: what is waiting, with a way into each queue. */
+export function SupportOverviewPage({ onOpen }: { onOpen: (page: string) => void }) {
+  const [counts, setCounts] = useState<{ cases: number; reports: number } | null>(null);
+  const [disputes, setDisputes] = useState(0);
+  const [cases, setCases] = useState<Array<{ id: string; booking?: { reference?: string; customerName?: string; listingTitle?: string }; messages: Array<{ body: string }> }> | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      api.admin.supportCounts(),
+      api.admin.listBookings({ dispute: 'open', page: 1 }).then((result) => result.openDisputes),
+      api.admin.listSupportCases('open').then((result) => result.data),
+    ]).then(([help, openDisputes, openCases]) => { if (!active) return; setCounts(help); setDisputes(openDisputes); setCases(openCases); })
+      .catch((reason: Error) => active && setError(reason.message));
+    return () => { active = false; };
+  }, []);
+  if (error) return <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>;
+  if (!counts || !cases) return <div className="flex justify-center py-10"><LoaderCircle className="size-6 animate-spin text-[#006F3C]" aria-label="Loading" /></div>;
+  const tiles: Array<[string, number, string, string]> = [
+    ['Open support cases', counts.cases, 'Guests waiting for a reply', 'support'],
+    ['Reported chats', counts.reports, 'Chats someone reported', 'support'],
+    ['Open no-show disputes', disputes, 'Guests disputing a no-show', 'disputes'],
+  ];
+  return <div className="space-y-5">
+    <div className="grid gap-3 sm:grid-cols-3">{tiles.map(([name, value, hint, page]) => <button key={name} type="button" onClick={() => onOpen(page)} className="rounded-xl border border-slate-200 bg-white p-5 text-left hover:border-[#006F3C]">
+      <p className="text-xs font-medium text-slate-500">{name}</p><p className="mt-2 text-2xl font-semibold">{value}</p><p className="mt-1 text-xs text-slate-500">{hint}</p>
+    </button>)}</div>
+    <section className={`${card} space-y-3`}>
+      <h2 className="font-bold">Oldest open cases</h2>
+      {cases.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">Nothing open. You are all caught up.</p>
+        : <ul className="divide-y divide-slate-100">{cases.slice(0, 5).map((item) => <li key={item.id} className="py-3 text-sm">
+          <p className="font-semibold">{item.booking?.reference ?? 'Booking'} · {item.booking?.customerName ?? 'Guest'}</p>
+          <p className="text-slate-600">{item.booking?.listingTitle}</p>
+          <p className="mt-1 line-clamp-2 text-slate-500">{item.messages.at(-1)?.body}</p>
+        </li>)}</ul>}
+      {cases.length > 0 && <button type="button" className={button} onClick={() => onOpen('support')}>Open tickets &amp; messages</button>}
+    </section>
   </div>;
 }
 
